@@ -23,8 +23,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { SidebarLeftIcon } from "@hugeicons/core-free-icons"
 import { Expand } from "../icons"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
@@ -258,7 +256,7 @@ function SidebarTrigger({
   onClick,
   icon,
   ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof Button> & { icon?: React.ComponentType<React.SVGProps<SVGSVGElement>> }) {
   const Icon = icon;
   const { toggleSidebar } = useSidebar()
 
@@ -275,8 +273,7 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      {/* <HugeiconsIcon icon={SidebarLeftIcon} strokeWidth={2} /> */}
-      <Expand className="size-5"/>
+      {Icon ? <Icon className="size-5" /> : <Expand className="size-5 ml-2 fill-[#8E8B86]" />}
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )
@@ -577,7 +574,7 @@ function SidebarMenuAction({
         className: cn(
           "absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 after:absolute after:-inset-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0",
           showOnHover &&
-            "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 peer-data-active/menu-button:text-sidebar-accent-foreground aria-expanded:opacity-100 md:opacity-0",
+          "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 peer-data-active/menu-button:text-sidebar-accent-foreground aria-expanded:opacity-100 md:opacity-0",
           className
         ),
       },
