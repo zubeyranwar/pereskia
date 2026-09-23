@@ -7,9 +7,11 @@
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.2",
-    "elysia": "latest"
+    "elysia": "latest",
+    "nodemailer": "^10.0.10"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
     "bun-types": "latest"
   },
   "module": "src/index.js"

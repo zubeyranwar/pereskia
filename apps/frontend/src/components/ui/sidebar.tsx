@@ -27,7 +27,7 @@ import { Expand } from "../icons"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = "16rem"
+const SIDEBAR_WIDTH = "15rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
@@ -266,14 +266,14 @@ function SidebarTrigger({
       data-slot="sidebar-trigger"
       variant="ghost"
       size="icon-sm"
-      className={cn(className)}
+      className={cn(className, "cursor-pointer")}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
       }}
       {...props}
     >
-      {Icon ? <Icon className="size-5" /> : <Expand className="size-5 ml-2 fill-[#8E8B86]" />}
+      {Icon ? <Icon className="size-5" /> : <Expand className="size-5 ml-3 fill-[#8E8B86]" />}
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

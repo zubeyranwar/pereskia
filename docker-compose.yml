@@ -1,0 +1,50 @@
+# Self-hosted Pereskia.
+#
+#   docker compose up -d        → http://localhost:3000
+#
+# With no DATABASE_URL, the first visit shows the setup wizard, where you pick
+# SQLite, PostgreSQL, MySQL or Supabase. To skip the wizard, set DATABASE_URL
+# (and uncomment one of the database services below).
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - pereskia-data:/data
+    environment:
+      # DATABASE_URL: postgres://pereskia:pereskia@postgres:5432/pereskia
+      # DATABASE_URL: mysql://pereskia:pereskia@mysql:3306/pereskia
+      # DATABASE_URL: postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres
+      # DATABASE_SSL: "true"
+      PORT: 3000
+      # Invitation emails (optional; can also be set up in the wizard or Settings → Email):
+      # APP_URL: https://notes.example.com
+      # RESEND_API_KEY: re_...
+      # SMTP_URL: smtps://user:pass@smtp.example.com:465
+      # MAIL_FROM: Pereskia <invites@example.com>
+    restart: unless-stopped
+
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: pereskia
+  #     POSTGRES_PASSWORD: pereskia
+  #     POSTGRES_DB: pereskia
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+
+  # mysql:
+  #   image: mysql:8
+  #   environment:
+  #     MYSQL_USER: pereskia
+  #     MYSQL_PASSWORD: pereskia
+  #     MYSQL_DATABASE: pereskia
+  #     MYSQL_ROOT_PASSWORD: change-me
+  #   volumes:
+  #     - mysql-data:/var/lib/mysql
+
+volumes:
+  pereskia-data:
+  # postgres-data:
+  # mysql-data:

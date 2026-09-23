@@ -1,18 +1,48 @@
-import { AppSidebar } from "./components/app-sidebar"
-import { AppTopbar } from "./components/app-topbar"
-import { Content } from "./components/content"
-import { SidebarProvider } from "./components/ui/sidebar"
+import { AuthScreen } from "@/components/auth/auth-screen"
+import { CreateWorkspaceScreen } from "@/components/auth/create-workspace-screen"
+import { InviteScreen } from "@/components/auth/invite-screen"
+import { WorkspaceShell } from "@/components/layout/workspace-shell"
+import { Button, FullScreen, Spinner } from "@/components/pereskia"
+import { SetupWizard } from "@/components/setup/setup-wizard"
+import { useMe, useSetupStatus } from "@/hooks/use-session"
+import { useWorkspaces } from "@/hooks/use-workspaces"
+import { errorMessage } from "@/lib/http"
+import { selectInviteToken, useAppStore } from "@/stores/app-store"
+
+function Loading() {
+    return (
+        <FullScreen>
+            <Spinner className="size-5 text-(--pk-text-tertiary)" />
+        </FullScreen>
+    )
+}
 
 export function App() {
-  return (
-    <SidebarProvider>
-      <AppSidebar />
-      <main>
-        <AppTopbar />
-        <Content />
-      </main>
-    </SidebarProvider>
-  )
+    const setup = useSetupStatus()
+    const configured = setup.data?.configured === true
+    const me = useMe()
+    const inviteToken = useAppStore(selectInviteToken)
+    const signedIn = configured && !!me.data
+    const workspaces = useWorkspaces(signedIn)
+
+    const failed = setup.error ?? (configured ? me.error : null)
+    if (failed) {
+        return (
+            <FullScreen>
+                <span>Can't reach the server: {errorMessage(failed)}</span>
+                <Button onClick={() => window.location.reload()}>Try again</Button>
+            </FullScreen>
+        )
+    }
+
+    if (setup.isLoading) return <Loading />
+    if (!configured) return <SetupWizard />
+    if (me.isLoading) return <Loading />
+    if (inviteToken) return <InviteScreen token={inviteToken} />
+    if (!me.data) return <AuthScreen />
+    if (workspaces.isLoading) return <Loading />
+    if (!workspaces.data?.length) return <CreateWorkspaceScreen />
+    return <WorkspaceShell />
 }
 
 export default App

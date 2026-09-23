@@ -11,4 +11,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    // The Elysia backend (apps/backend) serves the API on :3000 in development.
+    proxy: {
+      "/api": process.env.API_URL ?? "http://localhost:3000",
+    },
+  },
 })

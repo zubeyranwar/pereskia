@@ -1,0 +1,241 @@
+/*
+ * Pereskia design tokens
+ * ======================
+ *
+ * Every screen in the app is built from the components in this folder, and
+ * every component reads its colors, shadows and sizes from the variables
+ * below. Nothing else in the codebase should hard-code a color.
+ *
+ * The palette is a faithful reproduction of Notion's interface so the product
+ * feels familiar to teams moving over from it:
+ *
+ *   - Text is never pure black. Notion uses a warm, slightly brown charcoal
+ *     (rgb 55 53 47) and derives secondary/tertiary text by lowering its alpha
+ *     instead of picking new grays, which keeps every shade on the same hue.
+ *   - Hover and pressed states are the same charcoal at 6% and 12% opacity,
+ *     layered over whatever background is underneath. That is why hover works
+ *     identically on the white page, the off-white sidebar and inside menus.
+ *   - Borders are extremely light (rgb 233 233 231 for table grid lines,
+ *     9% charcoal for dividers). Notion relies on spacing, not lines, to
+ *     separate content.
+ *   - The single accent is Notion blue (rgb 35 131 226), used for primary
+ *     buttons, focus rings, checkboxes, selection and active filters.
+ *   - Popovers float on a three-layer shadow: a 1px hairline, a short soft
+ *     drop and a long diffuse drop. This is Notion's signature "paper" look.
+ *
+ * Dark mode swaps every variable for Notion's dark theme values (page
+ * rgb 25 25 25, popovers rgb 37 37 37, text at 81% white). Components never
+ * branch on the theme; they only use the variables.
+ */
+:root {
+    /* Notion's warm charcoal and its alpha-derived secondary/tertiary text. */
+    --pk-text: rgb(55, 53, 47);
+    --pk-text-secondary: rgba(55, 53, 47, 0.65);
+    --pk-text-tertiary: rgba(55, 53, 47, 0.45);
+
+    /* Table grid lines use a solid near-white; dividers use translucent charcoal. */
+    --pk-border: rgb(233, 233, 231);
+    --pk-divider: rgba(55, 53, 47, 0.09);
+
+    /* Notion's universal hover (6%) and pressed/selected (12%) overlays. */
+    --pk-hover: rgba(55, 53, 47, 0.06);
+    --pk-active: rgba(55, 53, 47, 0.12);
+
+    /* Page and floating surfaces. Notion's page is pure white in light mode. */
+    --pk-bg: #fff;
+    --pk-popover: #fff;
+
+    /* Notion's three-layer popover shadow: hairline + short drop + long diffuse drop. */
+    --pk-popover-shadow: rgba(15, 15, 15, 0.05) 0 0 0 1px, rgba(15, 15, 15, 0.1) 0 3px 6px, rgba(15, 15, 15, 0.2) 0 9px 24px;
+
+    /* Inputs sit on a faint warm-gray fill with a hairline border, as in Notion's forms. */
+    --pk-input-bg: rgba(242, 241, 238, 0.6);
+    --pk-input-border: rgba(15, 15, 15, 0.1);
+
+    /* Notion blue and its hover/soft/border variants for filter pills and focus. */
+    --pk-blue: rgb(35, 131, 226);
+    --pk-blue-hover: rgb(0, 117, 211);
+    --pk-blue-soft: rgba(35, 131, 226, 0.07);
+    --pk-blue-border: rgba(35, 131, 226, 0.35);
+    --pk-focus-ring: 0 0 0 2px rgba(35, 131, 226, 0.25);
+
+    /* The inset blue frame Notion draws around a database cell while its editor popover is open. */
+    --pk-cell-selected: inset 0 0 0 2px rgba(35, 131, 226, 0.57);
+
+    /* Notion's destructive red (delete actions) and success green (connected states). */
+    --pk-red: rgb(235, 87, 87);
+    --pk-green: rgb(68, 131, 97);
+
+    /* Text selection is Notion blue at 14%, so selected text stays readable. */
+    --pk-selection: rgba(35, 131, 226, 0.14);
+
+    /* Notion's off-white sidebar with muted nav text and its own hover/selected overlays. */
+    --pk-sidebar: rgb(248, 248, 247);
+    --pk-sidebar-text: rgb(95, 94, 91);
+    --pk-sidebar-hover: rgba(55, 53, 47, 0.06);
+    --pk-sidebar-active: rgba(55, 53, 47, 0.08);
+
+    /* Notion's scrollbar: warm-gray square thumb on a flat light track. */
+    --pk-scrollbar-thumb: #d3d1cb;
+    --pk-scrollbar-track: #edece9;
+
+    /* Backdrop behind modal dialogs: near-black at 60%, as in Notion's settings modal. */
+    --pk-backdrop: rgba(15, 15, 15, 0.6);
+
+    /*
+     * Notion's ten tag colors. Each has a pastel background, a very dark text
+     * of the same hue (not charcoal) so contrast stays high, and a saturated
+     * mid-tone "dot" used by status pills.
+     */
+    --tag-default-bg: rgba(227, 226, 224, 0.5);
+    --tag-default-text: rgb(50, 48, 44);
+    --tag-default-dot: rgb(145, 145, 142);
+    --tag-gray-bg: rgb(227, 226, 224);
+    --tag-gray-text: rgb(50, 48, 44);
+    --tag-gray-dot: rgb(145, 145, 142);
+    --tag-brown-bg: rgb(238, 224, 218);
+    --tag-brown-text: rgb(68, 42, 30);
+    --tag-brown-dot: rgb(187, 132, 108);
+    --tag-orange-bg: rgb(250, 222, 201);
+    --tag-orange-text: rgb(73, 41, 14);
+    --tag-orange-dot: rgb(215, 129, 58);
+    --tag-yellow-bg: rgb(253, 236, 200);
+    --tag-yellow-text: rgb(64, 44, 27);
+    --tag-yellow-dot: rgb(203, 148, 52);
+    --tag-green-bg: rgb(219, 237, 219);
+    --tag-green-text: rgb(28, 56, 41);
+    --tag-green-dot: rgb(108, 155, 125);
+    --tag-blue-bg: rgb(211, 229, 239);
+    --tag-blue-text: rgb(24, 51, 71);
+    --tag-blue-dot: rgb(91, 151, 189);
+    --tag-purple-bg: rgb(232, 222, 238);
+    --tag-purple-text: rgb(65, 36, 84);
+    --tag-purple-dot: rgb(167, 130, 195);
+    --tag-pink-bg: rgb(245, 224, 233);
+    --tag-pink-text: rgb(76, 35, 55);
+    --tag-pink-dot: rgb(205, 116, 159);
+    --tag-red-bg: rgb(255, 226, 221);
+    --tag-red-text: rgb(93, 23, 21);
+    --tag-red-dot: rgb(225, 111, 100);
+}
+
+/*
+ * Notion dark theme. Surfaces step up in lightness the higher they float
+ * (page 25 → sidebar 32 → popover 37), text becomes translucent white, and
+ * tag backgrounds become deep saturated tones with near-white text.
+ */
+.dark {
+    --pk-text: rgba(255, 255, 255, 0.81);
+    --pk-text-secondary: rgba(255, 255, 255, 0.443);
+    --pk-text-tertiary: rgba(255, 255, 255, 0.282);
+    --pk-border: rgb(47, 47, 47);
+    --pk-divider: rgba(255, 255, 255, 0.094);
+    --pk-hover: rgba(255, 255, 255, 0.055);
+    --pk-active: rgba(255, 255, 255, 0.1);
+    --pk-bg: rgb(25, 25, 25);
+    --pk-popover: rgb(37, 37, 37);
+    --pk-popover-shadow: rgba(15, 15, 15, 0.1) 0 0 0 1px, rgba(15, 15, 15, 0.2) 0 3px 6px, rgba(15, 15, 15, 0.4) 0 9px 24px;
+    --pk-input-bg: rgba(255, 255, 255, 0.055);
+    --pk-input-border: rgba(255, 255, 255, 0.094);
+    --pk-blue-soft: rgba(35, 131, 226, 0.14);
+    --pk-selection: rgba(35, 131, 226, 0.28);
+    --pk-green: rgb(82, 158, 114);
+    --pk-sidebar: rgb(32, 32, 32);
+    --pk-sidebar-text: rgba(255, 255, 255, 0.55);
+    --pk-sidebar-hover: rgba(255, 255, 255, 0.055);
+    --pk-sidebar-active: rgba(255, 255, 255, 0.08);
+    --pk-scrollbar-thumb: #474c50;
+    --pk-scrollbar-track: rgba(202, 204, 206, 0.04);
+
+    --tag-default-bg: rgb(55, 55, 55);
+    --tag-gray-bg: rgb(90, 90, 90);
+    --tag-brown-bg: rgb(96, 59, 44);
+    --tag-orange-bg: rgb(133, 76, 29);
+    --tag-yellow-bg: rgb(137, 99, 42);
+    --tag-green-bg: rgb(43, 89, 63);
+    --tag-blue-bg: rgb(40, 69, 108);
+    --tag-purple-bg: rgb(73, 47, 100);
+    --tag-pink-bg: rgb(105, 49, 76);
+    --tag-red-bg: rgb(110, 54, 48);
+    --tag-default-text: rgba(255, 255, 255, 0.88);
+    --tag-gray-text: rgba(255, 255, 255, 0.88);
+    --tag-brown-text: rgba(255, 255, 255, 0.88);
+    --tag-orange-text: rgba(255, 255, 255, 0.88);
+    --tag-yellow-text: rgba(255, 255, 255, 0.88);
+    --tag-green-text: rgba(255, 255, 255, 0.88);
+    --tag-blue-text: rgba(255, 255, 255, 0.88);
+    --tag-purple-text: rgba(255, 255, 255, 0.88);
+    --tag-pink-text: rgba(255, 255, 255, 0.88);
+    --tag-red-text: rgba(255, 255, 255, 0.88);
+}
+
+/*
+ * Base typography for anything rendered by Pereskia components. Notion's UI
+ * text is 14px with a relaxed 1.5 line height, rendered with grayscale
+ * antialiasing so the charcoal stays crisp instead of turning fuzzy-brown.
+ */
+.pk-root {
+    color: var(--pk-text);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+.pk-root ::selection {
+    background: var(--pk-selection);
+}
+
+/*
+ * Notion's scrollbars are deliberately "old-school": a 10px square thumb in
+ * warm gray on a flat track, rather than the OS overlay scrollbar. Apply
+ * .pk-scroller to any element with overflow scrolling.
+ */
+.pk-scroller {
+    scrollbar-color: var(--pk-scrollbar-thumb) var(--pk-scrollbar-track);
+}
+
+.pk-scroller::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: transparent;
+}
+
+.pk-scroller::-webkit-scrollbar-thumb {
+    background: var(--pk-scrollbar-thumb);
+}
+
+.pk-scroller::-webkit-scrollbar-track {
+    background: var(--pk-scrollbar-track);
+}
+
+/*
+ * In Notion's sidebar the scrollbar is invisible until the pointer enters the
+ * sidebar, and it never draws a track, so the sidebar reads as one calm
+ * column of navigation.
+ */
+.pk-sidebar .pk-scroller {
+    scrollbar-color: transparent transparent;
+}
+
+.pk-sidebar:hover .pk-scroller {
+    scrollbar-color: var(--pk-scrollbar-thumb) transparent;
+}
+
+.pk-sidebar .pk-scroller::-webkit-scrollbar-track,
+.pk-sidebar .pk-scroller::-webkit-scrollbar-thumb {
+    background: transparent;
+}
+
+.pk-sidebar:hover .pk-scroller::-webkit-scrollbar-thumb {
+    background: var(--pk-scrollbar-thumb);
+}
+
+/*
+ * The shadcn sidebar shell draws its own background and border; Notion's
+ * sidebar has no visible border, only its off-white fill against the page.
+ */
+.pk-sidebar-shell [data-slot="sidebar-inner"],
+.pk-sidebar-shell [data-slot="sidebar-container"] {
+    background: var(--pk-sidebar);
+    border-color: transparent;
+}
