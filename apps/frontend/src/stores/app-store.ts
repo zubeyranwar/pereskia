@@ -76,8 +76,16 @@ window.addEventListener("popstate", () => useAppStore.setState({ path: window.lo
 
 const INVITE_PREFIX = "/invite/"
 
+/* Paths that show the auth screen instead of the landing page or a workspace page. */
+const AUTH_ROUTES = { "/login": "login", "/signup": "signup" } as const
+
+export type AuthRoute = (typeof AUTH_ROUTES)[keyof typeof AUTH_ROUTES]
+
 export const selectInviteToken = (state: AppState) =>
     state.path.startsWith(INVITE_PREFIX) ? decodeURIComponent(state.path.slice(INVITE_PREFIX.length)) : null
 
+export const selectAuthRoute = (state: AppState): AuthRoute | null =>
+    AUTH_ROUTES[state.path as keyof typeof AUTH_ROUTES] ?? null
+
 export const selectPageId = (state: AppState) =>
-    state.path.startsWith(INVITE_PREFIX) ? null : decodeURIComponent(state.path.slice(1)) || null
+    state.path.startsWith(INVITE_PREFIX) || selectAuthRoute(state) ? null : decodeURIComponent(state.path.slice(1)) || null

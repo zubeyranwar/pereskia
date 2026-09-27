@@ -5,11 +5,11 @@ import { LoginForm, SignupForm } from "./auth-form"
 
 type Mode = "login" | "signup"
 
-export function AuthScreen() {
+export function AuthScreen({ initialMode }: { initialMode?: Mode } = {}) {
     const { data: setup } = useSetupStatus()
     const bootstrap = setup?.hasUsers === false
     const signupOpen = setup?.signupOpen !== false
-    const [mode, setMode] = useState<Mode>(bootstrap ? "signup" : "login")
+    const [mode, setMode] = useState<Mode>(bootstrap ? "signup" : (initialMode ?? "login"))
 
     if (bootstrap) {
         return (
