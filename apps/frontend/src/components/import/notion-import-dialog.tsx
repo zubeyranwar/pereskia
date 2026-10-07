@@ -131,8 +131,14 @@ export function NotionImportDialog() {
                                     <span className="truncate">{db.title}</span>
                                 </button>
                             ))}
-                            {filtered.length === 0 && (
-                                <MenuHint>{list.length === 0 ? "No databases found" : "No matching databases"}</MenuHint>
+                            {filtered.length === 0 && list.length === 0 && (
+                                <div className="px-2 py-3 text-xs text-(--pk-text-tertiary)">
+                                    <p className="mb-1 font-medium text-(--pk-text-secondary)">No databases found</p>
+                                    <p>Open each Notion database you want to import, click ··· → Connections, and add this integration.</p>
+                                </div>
+                            )}
+                            {filtered.length === 0 && list.length > 0 && (
+                                <MenuHint>No matching databases</MenuHint>
                             )}
                         </div>
                     </div>
