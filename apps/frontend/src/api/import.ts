@@ -11,3 +11,17 @@ export const importApi = {
             .post<{ page: Page; imported: number; truncated: boolean }>("/import", { workspaceId, connection, table })
             .then((r) => r.data),
 }
+
+export type NotionDatabase = { id: string; title: string }
+export type NotionPreview = ImportPreview & { hasMore: boolean }
+
+export const notionImportApi = {
+    databases: (workspaceId: string, token: string) =>
+        http.post<{ databases: NotionDatabase[] }>("/import/notion/databases", { workspaceId, token }).then((r) => r.data),
+    preview: (workspaceId: string, token: string, databaseId: string) =>
+        http.post<NotionPreview>("/import/notion/preview", { workspaceId, token, databaseId }).then((r) => r.data),
+    run: (workspaceId: string, token: string, databaseId: string) =>
+        http
+            .post<{ page: Page; imported: number; truncated: boolean }>("/import/notion/run", { workspaceId, token, databaseId })
+            .then((r) => r.data),
+}

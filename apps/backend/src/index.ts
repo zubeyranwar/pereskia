@@ -11,6 +11,7 @@ import { workspaceRoutes } from './routes/workspaces'
 import { memberRoutes } from './routes/members'
 import { pageRoutes } from './routes/pages'
 import { importRoutes } from './routes/import'
+import { notionImportRoutes } from './routes/notionImport'
 import { instanceRoutes } from './routes/instance'
 
 const config = await loadConfig()
@@ -65,6 +66,7 @@ app
   .use(memberRoutes)
   .use(pageRoutes)
   .use(importRoutes)
+  .use(notionImportRoutes)
   .use(instanceRoutes)
 
 if (hasStatic) {

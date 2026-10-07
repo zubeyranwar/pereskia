@@ -1,6 +1,7 @@
 import { useEffect } from "react"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { ImportDialog } from "@/components/import/import-dialog"
+import { NotionImportDialog } from "@/components/import/notion-import-dialog"
 import { EmptyWorkspace, PageView } from "@/components/page/page-view"
 import { SettingsDialog } from "@/components/settings/settings-dialog"
 import { Spinner } from "@/components/pereskia"
@@ -51,6 +52,7 @@ export function WorkspaceShell() {
             <SearchDialog />
             <SettingsDialog />
             <ImportDialog />
+            <NotionImportDialog />
         </SidebarProvider>
     )
 }

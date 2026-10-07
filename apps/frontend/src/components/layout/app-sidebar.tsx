@@ -62,7 +62,8 @@ export function AppSidebar() {
 
                 {canManage(workspace) && (
                     <div className="flex flex-col gap-px border-t border-(--pk-divider) px-1 py-2">
-                        <SidebarItem icon={<Download className="size-4.5" strokeWidth={1.75} />} label="Import" onClick={() => openDialog("import")} />
+                        <SidebarItem icon={<Download className="size-4.5" strokeWidth={1.75} />} label="Import from database" onClick={() => openDialog("import")} />
+                        <SidebarItem icon={<Download className="size-4.5" strokeWidth={1.75} />} label="Import from Notion" onClick={() => openDialog("notionImport")} />
                     </div>
                 )}
             </div>
