@@ -791,6 +791,25 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
         }
     }, { query: t.Object({ limit: t.Optional(t.String()), cursor: t.Optional(t.String()) }) })
 
+// ── Page read (service-token auth) ────────────────────────────────────────
+
+    .get("/pages/:pageId", async ({ params, headers, set }) => {
+        const token = await resolveToken(headers["authorization"] ?? null)
+        const retryAfter = checkTrackerRateLimit(token.id)
+        if (retryAfter) { set.status = 429; set.headers["Retry-After"] = String(retryAfter); return trackerError("rate_limited", "too many requests") }
+        requireScope(token, "tasks:read")
+        const { sql } = storage()
+        const [row] = await sql`SELECT * FROM pages WHERE id = ${params.pageId}`
+        if (!row) throw new HttpError(404, "page not found")
+        return {
+            id: row.id,
+            title: row.title,
+            icon: row.icon ?? null,
+            updated_at: new Date(Number(row.updated_at)).toISOString(),
+            content: row.content ? JSON.parse(row.content) : null,
+        }
+    })
+
 // ── Error shape helper ─────────────────────────────────────────────────────
 
 function trackerError(code: string, message: string, details?: Record<string, unknown>) {
