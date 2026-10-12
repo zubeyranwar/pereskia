@@ -11,10 +11,11 @@ import {
     SquareCheck,
     Table2,
     TextAlignStart,
+    UserRound,
     type LucideProps,
 } from "lucide-react"
 
-export type PropertyKind = "title" | "text" | "number" | "select" | "multiSelect" | "status" | "date" | "checkbox"
+export type PropertyKind = "title" | "text" | "number" | "select" | "multiSelect" | "status" | "date" | "checkbox" | "person"
 
 const PROPERTY_ICONS: Record<PropertyKind, ComponentType<LucideProps>> = {
     title: CaseSensitive,
@@ -25,6 +26,7 @@ const PROPERTY_ICONS: Record<PropertyKind, ComponentType<LucideProps>> = {
     status: Loader,
     date: Calendar,
     checkbox: SquareCheck,
+    person: UserRound,
 }
 
 export function PropertyIcon({ type, className }: { type: PropertyKind; className?: string }) {

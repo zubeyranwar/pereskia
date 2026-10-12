@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia"
 import { storage } from "../storage"
 import { HttpError, authPlugin, requirePageAccess, requireRole } from "../auth"
+import { insertImportedRows, listRows, splitContent } from "../rows"
 
 export type PageKind = "document" | "database"
 
@@ -73,11 +74,25 @@ export async function createPage(input: {
         createdAt: now,
         updatedAt: now,
     }
-    await sql`INSERT INTO pages (id, workspace_id, parent_id, kind, title, icon, cover, content, position, created_at, updated_at)
-              VALUES (${page.id}, ${page.workspaceId}, ${page.parentId}, ${page.kind}, ${page.title}, ${page.icon},
-                      ${page.cover}, ${page.content === null ? null : JSON.stringify(page.content)}, ${page.position},
-                      ${page.createdAt}, ${page.updatedAt})`
-    return page
+    const isDatabase = page.kind === "database" && page.content !== null
+    const { schema, rows } = splitContent(page.content)
+    const stored = isDatabase ? schema : page.content
+    await sql.begin(async (tx) => {
+        await tx`INSERT INTO pages (id, workspace_id, parent_id, kind, title, icon, cover, content, position, created_at, updated_at)
+                 VALUES (${page.id}, ${page.workspaceId}, ${page.parentId}, ${page.kind}, ${page.title}, ${page.icon},
+                         ${page.cover}, ${stored === null ? null : JSON.stringify(stored)}, ${page.position},
+                         ${page.createdAt}, ${page.updatedAt})`
+        if (isDatabase) await insertImportedRows(tx, page.id, rows)
+    })
+    return isDatabase ? { ...page, content: { ...schema, rows: await listRows(page.id) } } : page
+}
+
+async function readPage(id: string): Promise<Page> {
+    const { sql } = storage()
+    const [row] = await sql`SELECT * FROM pages WHERE id = ${id}`
+    const page = toPage(row)
+    if (page.kind !== "database") return page
+    return { ...page, content: { ...splitContent(page.content).schema, rows: await listRows(id) } }
 }
 
 const PageKindSchema = t.Union([t.Literal("document"), t.Literal("database")])
@@ -119,9 +134,7 @@ export const pageRoutes = new Elysia({ prefix: "/api" })
         "/pages/:id",
         async ({ params, user }) => {
             await requirePageAccess(user.id, params.id)
-            const { sql } = storage()
-            const [row] = await sql`SELECT * FROM pages WHERE id = ${params.id}`
-            return toPage(row)
+            return readPage(params.id)
         },
         { auth: true },
     )
@@ -133,6 +146,10 @@ export const pageRoutes = new Elysia({ prefix: "/api" })
             const { sql } = storage()
             const [row] = await sql`SELECT * FROM pages WHERE id = ${params.id}`
             const next = { ...toPage(row), ...body, updatedAt: Date.now() }
+            // Rows are saved one by one through /databases; the page only keeps the database's schema.
+            if (row.kind === "database" && body.content !== undefined && body.content !== null) {
+                next.content = splitContent(body.content).schema
+            }
             await sql`UPDATE pages SET
                         title = ${next.title}, icon = ${next.icon}, cover = ${next.cover},
                         content = ${next.content === null ? null : JSON.stringify(next.content)},
@@ -162,7 +179,15 @@ export const pageRoutes = new Elysia({ prefix: "/api" })
                 const children = await sql`SELECT id FROM pages WHERE parent_id = ${ids[i]}`
                 ids.push(...children.map((c: any) => c.id))
             }
-            for (const id of ids) await sql`DELETE FROM pages WHERE id = ${id}`
+            await sql.begin(async (tx) => {
+                for (const id of ids) {
+                    await tx`DELETE FROM pages WHERE id = ${id}`
+                    await tx`DELETE FROM database_rows WHERE page_id = ${id}`
+                    await tx`DELETE FROM row_comments WHERE page_id = ${id}`
+                    await tx`DELETE FROM row_history WHERE page_id = ${id}`
+                    await tx`DELETE FROM tracker_databases WHERE page_id = ${id}`
+                }
+            })
             return { deleted: ids }
         },
         { auth: true },

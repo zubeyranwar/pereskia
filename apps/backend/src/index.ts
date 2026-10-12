@@ -13,7 +13,8 @@ import { pageRoutes } from './routes/pages'
 import { importRoutes } from './routes/import'
 import { notionImportRoutes } from './routes/notionImport'
 import { instanceRoutes } from './routes/instance'
-import { trackerRoutes } from './routes/tracker'
+import { trackerErrorResponse, trackerRoutes } from './routes/tracker'
+import { databaseRoutes } from './routes/databases'
 import { trackerAdminRoutes } from './routes/trackerAdmin'
 
 const config = await loadConfig()
@@ -40,7 +41,8 @@ if (process.env.CORS_ORIGIN) {
 }
 
 app
-  .onError(({ error, code, set }) => {
+  .onError(({ error, code, set, request }) => {
+    if (new URL(request.url).pathname.startsWith('/api/v1/')) return trackerErrorResponse(error, code, set)
     if (error instanceof StorageNotConfigured) {
       set.status = 503
       return { error: error.message, code: 'SETUP_REQUIRED' }
@@ -70,11 +72,13 @@ app
   .use(importRoutes)
   .use(notionImportRoutes)
   .use(instanceRoutes)
+  .use(databaseRoutes)
   .use(trackerRoutes)
   .use(trackerAdminRoutes)
 
 if (hasStatic) {
   app.get('/*', async ({ path }) => {
+    if (path.startsWith('/api/v1/')) return Response.json({ error: { code: 'not_found', message: 'No such route' } }, { status: 404 })
     if (path.startsWith('/api/')) return Response.json({ error: 'Not found' }, { status: 404 })
     const file = Bun.file(join(STATIC_DIR, path))
     if (!path.includes('..') && path !== '/' && (await file.exists())) return file

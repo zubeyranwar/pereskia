@@ -1,5 +1,5 @@
 import { http } from "@/lib/http"
-import type { CreatedInvitation, Invitation, Member, Role, Workspace } from "./types"
+import type { CreatedInvitation, Invitation, Member, Role, TrackerToken, Workspace } from "./types"
 
 export const workspacesApi = {
     list: () => http.get<Workspace[]>("/workspaces").then((r) => r.data),
@@ -17,4 +17,10 @@ export const workspacesApi = {
         http.post<CreatedInvitation>(`/workspaces/${id}/invitations`, { email, role }).then((r) => r.data),
     revokeInvitation: (id: string, inviteId: string) =>
         http.delete(`/workspaces/${id}/invitations/${inviteId}`).then(() => undefined),
+
+    trackerTokens: (id: string) => http.get<TrackerToken[]>(`/workspaces/${id}/tracker-tokens`).then((r) => r.data),
+    createTrackerToken: (id: string, name: string) =>
+        http.post<{ id: string; token: string }>(`/workspaces/${id}/tracker-tokens`, { name }).then((r) => r.data),
+    revokeTrackerToken: (id: string, tokenId: string) =>
+        http.delete(`/workspaces/${id}/tracker-tokens/${tokenId}`).then(() => undefined),
 }

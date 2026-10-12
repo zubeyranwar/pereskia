@@ -415,6 +415,14 @@ export const DocumentEditor = forwardRef<{ focusFirst: () => void }, DocumentEdi
         }
     }
 
+    const turnIntoPage = (id: string) => {
+        const database = blocks.find((b) => b.id === id)?.database
+        if (!database) return
+        const newPageId = createPage({ kind: "database", parentId: pageId, title: database.title, content: database, open: false })
+        if (!newPageId) return
+        setBlocks((prev) => prev.map((b) => (b.id === id ? { id: b.id, type: "databasePage", content: "", pageId: newPageId } : b)))
+    }
+
     const handleDatabaseChange = (id: string, fn: (data: DatabaseData) => DatabaseData) => {
         setBlocks((prev) => prev.map((b) => b.id === id && b.database ? { ...b, database: fn(b.database) } : b))
     }
@@ -464,6 +472,7 @@ export const DocumentEditor = forwardRef<{ focusFirst: () => void }, DocumentEdi
                             onDatabaseChange={(fn) => handleDatabaseChange(block.id, fn)}
                             onInsert={(position) => insertParagraph(block.id, position)}
                             onDelete={() => deleteBlock(block.id)}
+                            onTurnIntoPage={block.type === "database" ? () => turnIntoPage(block.id) : undefined}
                         />
                     ) : (
                     <BlockEditor
@@ -493,11 +502,13 @@ function NonTextBlock({
     onDatabaseChange,
     onInsert,
     onDelete,
+    onTurnIntoPage,
 }: {
     block: Block
     onDatabaseChange: (fn: (data: DatabaseData) => DatabaseData) => void
     onInsert: (position: "above" | "below") => void
     onDelete: () => void
+    onTurnIntoPage?: () => void
 }) {
     const [menuOpen, setMenuOpen] = useState(false)
     const gripRef = useRef<HTMLButtonElement>(null)
@@ -535,6 +546,21 @@ function NonTextBlock({
                             }}
                         />
                     </MenuSection>
+                    {onTurnIntoPage && (
+                        <>
+                            <MenuSeparator />
+                            <MenuSection>
+                                <MenuItem
+                                    icon={<TableProperties className="size-4" strokeWidth={1.75} />}
+                                    label="Turn into page"
+                                    onClick={() => {
+                                        setMenuOpen(false)
+                                        onTurnIntoPage()
+                                    }}
+                                />
+                            </MenuSection>
+                        </>
+                    )}
                     <MenuSeparator />
                     <MenuSection>
                         <MenuItem

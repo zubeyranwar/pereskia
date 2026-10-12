@@ -26,6 +26,7 @@ export type CellValue = string | number | boolean | string[] | null
 export type Row = {
     id: string
     cells: Record<string, CellValue>
+    key?: string
 }
 
 export type FilterOperator =
@@ -77,6 +78,14 @@ export type DatabaseData = {
     sorts: Sort[]
 }
 
+// Person cells hold a user id; names come from the workspace's members, loaded by the view.
+const people = new Map<string, string>()
+
+export function setPeople(members: { id: string; name: string }[]) {
+    people.clear()
+    for (const m of members) people.set(m.id, m.name)
+}
+
 export const TAG_COLORS: TagColor[] = [
     "default",
     "gray",
@@ -112,6 +121,7 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
     status: "Status",
     date: "Date",
     checkbox: "Checkbox",
+    person: "Person",
 }
 
 export const STATUS_GROUP_LABELS: Record<StatusGroup, string> = {
@@ -150,6 +160,7 @@ export const OPERATORS_BY_TYPE: Record<PropertyType, FilterOperator[]> = {
     multiSelect: ["contains", "doesNotContain", "isEmpty", "isNotEmpty"],
     date: ["is", "isBefore", "isAfter", "isOnOrBefore", "isOnOrAfter", "isEmpty", "isNotEmpty"],
     checkbox: ["is", "isNot"],
+    person: ["is", "isNot", "isEmpty", "isNotEmpty"],
 }
 
 export const DEFAULT_OPERATOR: Record<Property["type"], FilterOperator> = {
@@ -161,6 +172,7 @@ export const DEFAULT_OPERATOR: Record<Property["type"], FilterOperator> = {
     multiSelect: "contains",
     date: "is",
     checkbox: "is",
+    person: "is",
 }
 
 export function newFilter(property: Property): Filter {
@@ -210,7 +222,7 @@ export function emptyValue(type: PropertyType): CellValue {
 }
 
 export function defaultFilterValue(type: PropertyType): CellValue {
-    if (type === "select" || type === "status" || type === "multiSelect") return []
+    if (type === "select" || type === "status" || type === "multiSelect" || type === "person") return []
     if (type === "checkbox") return true
     return null
 }
@@ -245,6 +257,8 @@ export function convertValue(value: CellValue, from: Property, to: Property): Ce
             const names = text.split(",").map((s) => s.trim())
             return to.options?.filter((o) => names.includes(o.name)).map((o) => o.id) ?? []
         }
+        case "person":
+            return [...people].find(([, name]) => name === text.trim())?.[0] ?? null
     }
 }
 
@@ -266,6 +280,7 @@ export function optionsFromValues(rows: Row[], from: Property, to: PropertyType)
 export function valueToText(value: CellValue, property: Property): string {
     if (value === null || value === undefined) return ""
     if (property.type === "checkbox") return value ? "true" : ""
+    if (property.type === "person") return people.get(value as string) ?? ""
     if (property.type === "select" || property.type === "status") {
         return property.options?.find((o) => o.id === value)?.name ?? ""
     }
@@ -325,7 +340,8 @@ export function matchesFilter(row: Row, filter: Filter, property: Property | und
             return true
         }
         case "select":
-        case "status": {
+        case "status":
+        case "person": {
             const ids = value as string[]
             const hit = ids.includes(cell as string)
             return operator === "isNot" ? !hit : hit
@@ -372,6 +388,8 @@ function compareCells(a: CellValue, b: CellValue, property: Property): number {
             return (a as number) - (b as number)
         case "checkbox":
             return Number(a === true) - Number(b === true)
+        case "person":
+            return (people.get(a as string) ?? "").localeCompare(people.get(b as string) ?? "")
         case "select":
         case "status": {
             const order = property.options?.map((o) => o.id) ?? []

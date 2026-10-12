@@ -10,6 +10,7 @@ import {
     Copy,
     GripVertical,
     ListFilter,
+    PanelRightOpen,
     Plus,
     Trash2,
 } from "lucide-react"
@@ -41,24 +42,29 @@ import {
     Checkbox,
     OptionChip,
     PropertyIcon,
+    Avatar,
 } from "@/components/pereskia"
+import { usePeopleView } from "./use-people-view"
 
 type Update = (fn: (data: DatabaseData) => DatabaseData) => void
 type CellRef = { rowId: string; propertyId: string }
 
 const ADD_COLUMN_WIDTH = 36
 const MIN_COLUMN_WIDTH = 60
-const PROPERTY_TYPES: PropertyType[] = ["text", "number", "select", "multiSelect", "status", "date", "checkbox"]
+const PROPERTY_TYPES: PropertyType[] = ["text", "number", "select", "multiSelect", "status", "date", "checkbox", "person"]
 
 export function DatabaseView({
-    data,
-    onChange,
+    data: raw,
+    onChange: rawOnChange,
     variant = "inline",
+    onOpenRow,
 }: {
     data: DatabaseData
     onChange: Update
     variant?: "inline" | "page"
+    onOpenRow?: (rowId: string) => void
 }) {
+    const [data, onChange] = usePeopleView(raw, rawOnChange)
     const [controls, setControlsState] = useState<ControlsState>({
         barVisible: true,
         openFilterId: null,
@@ -190,6 +196,7 @@ export function DatabaseView({
                                 onSetCell={(propertyId, value) => setCell(row.id, propertyId, value)}
                                 onSetOptions={setOptions}
                                 onInsertBelow={() => addRow(data.rows.findIndex((r) => r.id === row.id) + 1)}
+                                onOpen={onOpenRow ? () => onOpenRow(row.id) : undefined}
                             />
                         ))}
                     </tbody>
@@ -489,6 +496,7 @@ function BodyRow({
     onSetCell,
     onSetOptions,
     onInsertBelow,
+    onOpen,
 }: {
     row: Row
     data: DatabaseData
@@ -498,6 +506,7 @@ function BodyRow({
     onSetCell: (propertyId: string, value: CellValue) => void
     onSetOptions: (propertyId: string, options: SelectOption[]) => void
     onInsertBelow: () => void
+    onOpen?: () => void
 }) {
     const [menuOpen, setMenuOpen] = useState(false)
     const [dropSide, setDropSide] = useState<"top" | "bottom" | null>(null)
@@ -558,6 +567,21 @@ function BodyRow({
                     onEdit={(on) => onEdit(on ? property.id : null)}
                     onChange={(value) => onSetCell(property.id, value)}
                     onOptionsChange={(options) => onSetOptions(property.id, options)}
+                    action={
+                        property.type === "title" && onOpen ? (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    onOpen()
+                                }}
+                                className="absolute top-1.5 right-1.5 z-10 flex h-6 cursor-pointer items-center gap-1 rounded-sm border border-(--pk-border) bg-(--pk-bg) px-1.5 text-xs font-medium text-(--pk-text-secondary) opacity-0 shadow-sm transition-opacity group-hover/row:opacity-100 hover:bg-(--pk-hover)"
+                            >
+                                <PanelRightOpen className="size-3.5" strokeWidth={1.75} />
+                                Open
+                            </button>
+                        ) : null
+                    }
                     handles={
                         i === 0 && (
                             <div
@@ -607,7 +631,7 @@ function BodyRow({
     )
 }
 
-function Cell({
+export function Cell({
     property,
     value,
     editing,
@@ -615,6 +639,9 @@ function Cell({
     onChange,
     onOptionsChange,
     handles,
+    action,
+    as = "td",
+    className,
 }: {
     property: Property
     value: CellValue
@@ -623,22 +650,29 @@ function Cell({
     onChange: (value: CellValue) => void
     onOptionsChange: (options: SelectOption[]) => void
     handles?: React.ReactNode
+    action?: React.ReactNode
+    as?: "td" | "div"
+    className?: string
 }) {
-    const tdRef = useRef<HTMLTableCellElement>(null)
-    const isPopoverType = ["select", "multiSelect", "status", "date"].includes(property.type)
+    const tdRef = useRef<HTMLElement>(null)
+    const isPopoverType = ["select", "multiSelect", "status", "date", "person"].includes(property.type)
     const isText = property.type === "title" || property.type === "text" || property.type === "number"
+    const Tag = as as "td"
 
     return (
-        <td
-            ref={tdRef}
+        <Tag
+            ref={tdRef as React.RefObject<HTMLTableCellElement>}
             onClick={() => property.type !== "checkbox" && onEdit(true)}
             className={cn(
-                "relative h-[33px] border-r border-(--pk-border) p-0 align-top",
+                "relative p-0 align-top",
+                as === "td" && "h-[33px] border-r border-(--pk-border)",
                 property.type !== "checkbox" && "cursor-pointer",
                 editing && isPopoverType && "shadow-(--pk-cell-selected)",
+                className,
             )}
         >
             {handles}
+            {action}
             <div
                 className={cn(
                     "flex min-h-[33px] items-center overflow-hidden px-2 py-[5px]",
@@ -669,12 +703,13 @@ function Cell({
                             multi={property.type === "multiSelect"}
                             onChange={(ids) => onChange(property.type === "multiSelect" ? ids : (ids[0] ?? null))}
                             onDone={() => onEdit(false)}
-                            onOptionsChange={onOptionsChange}
+                            allowCreate={property.type !== "person"}
+                            onOptionsChange={property.type === "person" ? undefined : onOptionsChange}
                         />
                     )}
                 </Popover>
             )}
-        </td>
+        </Tag>
     )
 }
 
@@ -716,6 +751,15 @@ function CellDisplay({
             return value ? <span className="truncate whitespace-nowrap">{formatDate(value as string)}</span> : null
         case "checkbox":
             return <Checkbox checked={value === true} onChange={onChange} />
+        case "person": {
+            const person = property.options?.find((o) => o.id === value)
+            return person ? (
+                <span className="flex min-w-0 items-center gap-1.5">
+                    <Avatar name={person.name} seed={person.id} size={20} />
+                    <span className="truncate">{person.name}</span>
+                </span>
+            ) : null
+        }
     }
 }
 

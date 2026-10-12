@@ -1,110 +1,45 @@
 import { Elysia, t } from "elysia"
 import { storage } from "../storage"
-import { createServiceToken } from "./tracker"
-import { userForSession, SESSION_COOKIE, HttpError } from "../auth"
+import { ALL_SCOPES, createServiceToken } from "./tracker"
+import { HttpError, SESSION_COOKIE, requireRole, userForSession } from "../auth"
 
-const SEED_STATUSES = [
-    { id: "s-todo",      name: "To do",       category: "todo",        order: 0 },
-    { id: "s-doing",     name: "In progress", category: "in_progress", order: 1 },
-    { id: "s-review",    name: "In review",   category: "in_progress", order: 2 },
-    { id: "s-done",      name: "Done",        category: "done",        order: 3 },
-    { id: "s-cancelled", name: "Cancelled",   category: "cancelled",   order: 4 },
-]
-const SEED_TYPES = [
-    { id: "t-task", name: "Task" },
-    { id: "t-bug",  name: "Bug"  },
-    { id: "t-feat", name: "Feature" },
-]
-const SEED_PRIORITIES = [
-    { id: "p-urgent", name: "Urgent", rank: 1 },
-    { id: "p-high",   name: "High",   rank: 2 },
-    { id: "p-medium", name: "Medium", rank: 3 },
-    { id: "p-low",    name: "Low",    rank: 4 },
-]
-
-async function requireSession(cookie: Record<string, any>) {
-    const token = cookie[SESSION_COOKIE]?.value as string | undefined
-    const user = await userForSession(token)
+async function requireAdmin(cookie: Record<string, any>, workspaceId: string) {
+    const user = await userForSession(cookie[SESSION_COOKIE]?.value as string | undefined)
     if (!user) throw new HttpError(401, "You need to sign in.")
+    await requireRole(user.id, workspaceId, "admin")
     return user
 }
 
-export const trackerAdminRoutes = new Elysia({ prefix: "/api/tracker-admin" })
-
+export const trackerAdminRoutes = new Elysia({ prefix: "/api/workspaces/:id/tracker-tokens" })
+    .get("/", async ({ cookie, params }) => {
+        await requireAdmin(cookie, params.id)
+        const { sql } = storage()
+        const rows = await sql`SELECT id, name, scopes, created_at, revoked_at FROM tracker_service_tokens
+                               WHERE workspace_id = ${params.id} ORDER BY created_at`
+        return rows.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            scopes: JSON.parse(r.scopes),
+            createdAt: Number(r.created_at),
+            revokedAt: r.revoked_at == null ? null : Number(r.revoked_at),
+        }))
+    })
     .post(
-        "/token",
-        async ({ cookie, body }) => {
-            const user = await requireSession(cookie)
-            const result = await createServiceToken(
-                body.name,
-                body.workspace_id,
-                body.workspace_name,
-                ["tasks:read", "tasks:write", "comments:write", "webhooks:write"],
-            )
-            return {
-                token: result.token,
-                id: result.id,
-                base_url: "/api/v1",
-                note: "Store this token securely — it will not be shown again.",
-            }
+        "/",
+        async ({ cookie, params, body }) => {
+            await requireAdmin(cookie, params.id)
+            const { id, token } = await createServiceToken(body.name, params.id, ALL_SCOPES)
+            return { id, token, note: "Store this token securely — it will not be shown again." }
         },
-        {
-            body: t.Object({
-                name: t.String(),
-                workspace_id: t.String(),
-                workspace_name: t.String(),
-            }),
-        },
+        { body: t.Object({ name: t.String({ minLength: 1, maxLength: 100 }) }) },
     )
-
-    .post(
-        "/seed",
-        async ({ cookie, body }) => {
-            const user = await requireSession(cookie)
-            const { sql } = storage()
-            const now = Date.now()
-            const projectId = body.project_id ?? `proj-${crypto.randomUUID().slice(0, 8)}`
-            const projectKey = body.project_key ?? "ENG"
-            const projectName = body.project_name ?? "Engineering"
-
-            await sql`INSERT INTO tracker_projects (id, key, name, archived, next_task_num, created_at)
-                      VALUES (${projectId}, ${projectKey}, ${projectName}, 0, 1, ${now})
-                      ON CONFLICT (id) DO NOTHING`
-
-            for (const s of SEED_STATUSES) {
-                await sql`INSERT INTO tracker_statuses (id, project_id, name, category, order_num)
-                          VALUES (${s.id + "-" + projectId.slice(-4)}, ${projectId}, ${s.name}, ${s.category}, ${s.order})
-                          ON CONFLICT (id) DO NOTHING`
-            }
-            for (const tp of SEED_TYPES) {
-                await sql`INSERT INTO tracker_types (id, project_id, name)
-                          VALUES (${tp.id + "-" + projectId.slice(-4)}, ${projectId}, ${tp.name})
-                          ON CONFLICT (id) DO NOTHING`
-            }
-            for (const p of SEED_PRIORITIES) {
-                await sql`INSERT INTO tracker_priorities (id, project_id, name, rank)
-                          VALUES (${p.id + "-" + projectId.slice(-4)}, ${projectId}, ${p.name}, ${p.rank})
-                          ON CONFLICT (id) DO NOTHING`
-            }
-
-            await sql`INSERT INTO tracker_members (id, name, email, active, created_at)
-                      VALUES (${user.id}, ${user.name}, ${user.email}, 1, ${now})
-                      ON CONFLICT (id) DO NOTHING`
-
-            return {
-                project_id: projectId,
-                project_key: projectKey,
-                project_name: projectName,
-                statuses: SEED_STATUSES.length,
-                types: SEED_TYPES.length,
-                priorities: SEED_PRIORITIES.length,
-            }
-        },
-        {
-            body: t.Object({
-                project_id: t.Optional(t.String()),
-                project_key: t.Optional(t.String()),
-                project_name: t.Optional(t.String()),
-            }),
-        },
-    )
+    .delete("/:tokenId", async ({ cookie, params }) => {
+        await requireAdmin(cookie, params.id)
+        const { sql } = storage()
+        const result = await sql`UPDATE tracker_service_tokens SET revoked_at = ${Date.now()}
+                                 WHERE id = ${params.tokenId} AND workspace_id = ${params.id} AND revoked_at IS NULL`
+        if (!result.count) throw new HttpError(404, "Token not found")
+        // A replaced or revoked token's webhooks would keep firing at the dashboard; remove them with it.
+        await sql`DELETE FROM tracker_webhooks WHERE token_id = ${params.tokenId}`
+        return { revoked: true }
+    })

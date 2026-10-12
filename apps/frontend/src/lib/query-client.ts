@@ -20,4 +20,7 @@ export const queryKeys = {
     invitations: (workspaceId: string) => ["workspaces", workspaceId, "invitations"] as const,
     invitation: (token: string) => ["invitation", token] as const,
     emailSettings: ["instance", "email"] as const,
+    row: (pageId: string, rowId: string) => ["page", pageId, "row", rowId] as const,
+    tracker: (pageId: string) => ["page", pageId, "tracker"] as const,
+    trackerTokens: (workspaceId: string) => ["workspaces", workspaceId, "tracker-tokens"] as const,
 }

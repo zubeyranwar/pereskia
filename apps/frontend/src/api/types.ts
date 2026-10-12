@@ -98,6 +98,45 @@ export type Page = PageMeta & { cover: string | null; content: unknown; createdA
 
 export type PagePatch = { title?: string; icon?: string | null; cover?: string | null; content?: unknown; parentId?: string | null }
 
+export type CellValue = string | number | boolean | string[] | null
+
+export type RowOps = {
+    upserts?: { id: string; cells?: Record<string, CellValue>; position?: number }[]
+    deletes?: string[]
+}
+
+export type PersonRef = { id: string | null; name: string | null; email: string | null }
+
+export type TaskComment = { id: string; task_id: string; body: string; author: PersonRef; created_at: string }
+
+export type TaskHistoryEntry = {
+    id: string
+    task_id: string
+    at: string
+    field: "status" | "assignee" | "priority" | "due_date"
+    from: { name?: string; email?: string } | string | null
+    to: { name?: string; email?: string } | string | null
+    actor: PersonRef | null
+}
+
+export type RowDetail = {
+    id: string
+    key: string | null
+    body: string
+    createdAt: number
+    updatedAt: number
+    startedAt: number | null
+    completedAt: number | null
+    reporter: PersonRef | null
+    externalRef: { source: string; id: string; url?: string | null } | null
+    comments: TaskComment[]
+    history: TaskHistoryEntry[]
+}
+
+export type TrackerStatus = { connected: boolean; projectKey: string | null }
+
+export type TrackerToken = { id: string; name: string; scopes: string[]; createdAt: number; revokedAt: number | null }
+
 export type ImportPreview = {
     total: number
     columns: { name: string; type: PropertyKind }[]

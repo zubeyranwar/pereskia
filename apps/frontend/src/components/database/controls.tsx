@@ -219,6 +219,7 @@ function FilterValueEditor({
         case "select":
         case "status":
         case "multiSelect":
+        case "person":
             return (
                 <div className="border-t border-(--pk-divider)">
                     <OptionPicker

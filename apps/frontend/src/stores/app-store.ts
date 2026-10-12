@@ -3,7 +3,7 @@ import { createJSONStorage, persist, type StateStorage } from "zustand/middlewar
 
 export type SaveState = "idle" | "saving" | "saved" | "error"
 export type AppDialog = "search" | "settings" | "import" | "notionImport" | null
-export type SettingsTab = "general" | "members" | "storage" | "email"
+export type SettingsTab = "general" | "members" | "storage" | "integrations" | "email"
 
 type AppState = {
     path: string

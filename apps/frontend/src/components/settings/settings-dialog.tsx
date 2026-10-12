@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Database, Mail, SlidersHorizontal, Users } from "lucide-react"
+import { Database, Mail, Plug, SlidersHorizontal, Users } from "lucide-react"
 import { Button, Code, Dialog, DialogSection, Field, Input, StatusDot, TabList } from "@/components/pereskia"
 import { ProviderMark } from "@/components/setup/connection-form"
 import { PROVIDER_INFO } from "@/components/setup/connection-info"
@@ -7,6 +7,7 @@ import { useMe, useSetupStatus } from "@/hooks/use-session"
 import { canManage, useCurrentWorkspace, useRenameWorkspace } from "@/hooks/use-workspaces"
 import { useAppStore, type SettingsTab } from "@/stores/app-store"
 import { EmailPanel } from "./email-panel"
+import { IntegrationsPanel } from "./integrations-panel"
 import { MembersPanel } from "./members-panel"
 
 const TABS: { value: SettingsTab; label: string; icon: React.ReactNode }[] = [
@@ -14,6 +15,7 @@ const TABS: { value: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { value: "members", label: "Members", icon: <Users className="size-4" strokeWidth={1.75} /> },
     { value: "storage", label: "Storage", icon: <Database className="size-4" strokeWidth={1.75} /> },
 ]
+const INTEGRATIONS_TAB = { value: "integrations" as const, label: "Integrations", icon: <Plug className="size-4" strokeWidth={1.75} /> }
 const EMAIL_TAB = { value: "email" as const, label: "Email", icon: <Mail className="size-4" strokeWidth={1.75} /> }
 
 export function SettingsDialog() {
@@ -29,12 +31,13 @@ export function SettingsDialog() {
             <div className="flex min-h-0 flex-1">
                 <aside className="w-55 shrink-0 bg-(--pk-sidebar) p-2 text-(--pk-sidebar-text)">
                     <div className="truncate px-2 pt-1 pb-2 text-xs font-medium text-(--pk-text-tertiary)">{workspace?.name}</div>
-                    <TabList value={tab} tabs={instanceAdmin ? [...TABS, EMAIL_TAB] : TABS} onChange={(t) => openDialog("settings", t)} />
+                    <TabList value={tab} tabs={[...TABS, ...(canManage(workspace) ? [INTEGRATIONS_TAB] : []), ...(instanceAdmin ? [EMAIL_TAB] : [])]} onChange={(t) => openDialog("settings", t)} />
                 </aside>
                 <div className="pk-scroller min-w-0 flex-1 overflow-y-auto px-10 py-8">
                     {tab === "general" && <GeneralPanel />}
                     {tab === "members" && workspace && <MembersPanel workspace={workspace} />}
                     {tab === "storage" && <StoragePanel />}
+                    {tab === "integrations" && workspace && canManage(workspace) && <IntegrationsPanel workspace={workspace} />}
                     {tab === "email" && instanceAdmin && <EmailPanel />}
                 </div>
             </div>

@@ -108,7 +108,53 @@ async function migrate(sql: SQL, dialect: Dialect) {
         await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_invitations_workspace ON invitations (workspace_id)`)
     }
 
-    // Tracker tables
+    await sql.unsafe(`CREATE TABLE IF NOT EXISTS database_rows (
+        id ${T.id} PRIMARY KEY,
+        page_id ${T.id} NOT NULL,
+        position ${T.float} NOT NULL,
+        cells ${T.longText} NOT NULL,
+        body ${T.longText},
+        num ${T.bigint},
+        reporter_id ${T.id},
+        reporter_email ${T.key},
+        external_ref ${T.text},
+        started_at ${T.bigint},
+        completed_at ${T.bigint},
+        deleted_at ${T.bigint},
+        created_at ${T.bigint} NOT NULL,
+        updated_at ${T.bigint} NOT NULL
+        ${index("idx_rows_page", "page_id, updated_at")}
+    )`)
+    await sql.unsafe(`CREATE TABLE IF NOT EXISTS row_comments (
+        id ${T.id} PRIMARY KEY,
+        row_id ${T.id} NOT NULL,
+        page_id ${T.id} NOT NULL,
+        body ${T.longText} NOT NULL,
+        author_id ${T.id},
+        author_email ${T.key},
+        created_at ${T.bigint} NOT NULL
+        ${index("idx_comments_row", "row_id")}
+    )`)
+    await sql.unsafe(`CREATE TABLE IF NOT EXISTS row_history (
+        id ${T.id} PRIMARY KEY,
+        row_id ${T.id} NOT NULL,
+        page_id ${T.id} NOT NULL,
+        at ${T.bigint} NOT NULL,
+        field ${T.text} NOT NULL,
+        from_value ${T.text},
+        to_value ${T.text},
+        actor_id ${T.id},
+        actor_email ${T.key}
+        ${index("idx_history_page", "page_id, at")}
+    )`)
+    await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_databases (
+        page_id ${T.id} PRIMARY KEY,
+        workspace_id ${T.id} NOT NULL,
+        project_key ${T.text} NOT NULL,
+        next_num ${T.bigint} NOT NULL,
+        created_at ${T.bigint} NOT NULL
+    )`)
+
     await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_service_tokens (
         id ${T.id} PRIMARY KEY,
         name ${T.text} NOT NULL,
@@ -119,93 +165,6 @@ async function migrate(sql: SQL, dialect: Dialect) {
         revoked_at ${T.bigint},
         created_at ${T.bigint} NOT NULL
     )`)
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_projects (
-        id ${T.id} PRIMARY KEY,
-        key ${T.text} NOT NULL,
-        name ${T.text} NOT NULL,
-        archived ${T.bigint} NOT NULL DEFAULT 0,
-        next_task_num ${T.bigint} NOT NULL DEFAULT 1,
-        created_at ${T.bigint} NOT NULL
-    )`)
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_statuses (
-        id ${T.id} PRIMARY KEY,
-        project_id ${T.id} NOT NULL,
-        name ${T.text} NOT NULL,
-        category ${T.text} NOT NULL,
-        order_num ${T.bigint} NOT NULL DEFAULT 0
-    )`)
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_types (
-        id ${T.id} PRIMARY KEY,
-        project_id ${T.id} NOT NULL,
-        name ${T.text} NOT NULL
-    )`)
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_priorities (
-        id ${T.id} PRIMARY KEY,
-        project_id ${T.id} NOT NULL,
-        name ${T.text} NOT NULL,
-        rank ${T.bigint} NOT NULL
-    )`)
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_labels (
-        id ${T.id} PRIMARY KEY,
-        project_id ${T.id} NOT NULL,
-        name ${T.text} NOT NULL
-    )`)
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_members (
-        id ${T.id} PRIMARY KEY,
-        name ${T.text} NOT NULL,
-        email ${T.key} NOT NULL UNIQUE,
-        active ${T.bigint} NOT NULL DEFAULT 1,
-        created_at ${T.bigint} NOT NULL
-    )`)
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_tasks (
-        id ${T.id} PRIMARY KEY,
-        key ${T.text} NOT NULL UNIQUE,
-        project_id ${T.id} NOT NULL,
-        type_id ${T.id} NOT NULL,
-        title ${T.text} NOT NULL,
-        description ${T.longText},
-        status_id ${T.id} NOT NULL,
-        priority_id ${T.id},
-        assignee_id ${T.id},
-        reporter_id ${T.id},
-        reporter_email ${T.key},
-        labels ${T.text},
-        due_date ${T.text},
-        estimate_points ${T.float},
-        subtasks_total ${T.bigint} NOT NULL DEFAULT 0,
-        subtasks_done ${T.bigint} NOT NULL DEFAULT 0,
-        checklist_total ${T.bigint} NOT NULL DEFAULT 0,
-        checklist_done ${T.bigint} NOT NULL DEFAULT 0,
-        progress_percent ${T.bigint} NOT NULL DEFAULT 0,
-        parent_id ${T.id},
-        external_ref ${T.text},
-        started_at ${T.bigint},
-        completed_at ${T.bigint},
-        deleted_at ${T.bigint},
-        created_at ${T.bigint} NOT NULL,
-        updated_at ${T.bigint} NOT NULL
-        ${index("idx_tracker_tasks_project", "project_id, updated_at")}
-    )`)
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_task_history (
-        id ${T.id} PRIMARY KEY,
-        task_id ${T.id} NOT NULL,
-        at ${T.bigint} NOT NULL,
-        field ${T.text} NOT NULL,
-        from_value ${T.text},
-        to_value ${T.text},
-        actor_id ${T.id},
-        created_at ${T.bigint} NOT NULL
-        ${index("idx_tracker_history_task", "task_id")}
-    )`)
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_comments (
-        id ${T.id} PRIMARY KEY,
-        task_id ${T.id} NOT NULL,
-        body ${T.longText} NOT NULL,
-        author_id ${T.id},
-        author_email ${T.key},
-        created_at ${T.bigint} NOT NULL
-        ${index("idx_tracker_comments_task", "task_id")}
-    )`)
     await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_webhooks (
         id ${T.id} PRIMARY KEY,
         url ${T.text} NOT NULL,
@@ -213,6 +172,8 @@ async function migrate(sql: SQL, dialect: Dialect) {
         secret ${T.text} NOT NULL,
         created_at ${T.bigint} NOT NULL
     )`)
+    await sql.unsafe(`ALTER TABLE tracker_webhooks ADD COLUMN workspace_id ${T.id}`).catch(() => {})
+    await sql.unsafe(`ALTER TABLE tracker_webhooks ADD COLUMN token_id ${T.id}`).catch(() => {})
     await sql.unsafe(`CREATE TABLE IF NOT EXISTS tracker_idempotency_keys (
         key_hash ${T.hash} PRIMARY KEY,
         body_hash ${T.hash} NOT NULL,
@@ -222,8 +183,28 @@ async function migrate(sql: SQL, dialect: Dialect) {
     )`)
 
     if (dialect !== "mysql") {
-        await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_tracker_tasks_project ON tracker_tasks (project_id, updated_at)`)
-        await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_tracker_history_task ON tracker_task_history (task_id)`)
-        await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_tracker_comments_task ON tracker_comments (task_id)`)
+        await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_rows_page ON database_rows (page_id, updated_at)`)
+        await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_comments_row ON row_comments (row_id)`)
+        await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_history_page ON row_history (page_id, at)`)
+    }
+
+    await moveDatabaseRowsOutOfContent(sql)
+}
+
+// Database pages used to keep their rows inside pages.content; rows now live in database_rows.
+async function moveDatabaseRowsOutOfContent(sql: SQL) {
+    const pages = await sql`SELECT id, content, created_at FROM pages WHERE kind = 'database'`
+    for (const page of pages) {
+        const content = page.content ? JSON.parse(page.content) : null
+        if (!Array.isArray(content?.rows)) continue
+        const { rows, ...schema } = content
+        const now = Date.now()
+        await sql.begin(async (tx) => {
+            for (const [i, row] of rows.entries()) {
+                await tx`INSERT INTO database_rows (id, page_id, position, cells, created_at, updated_at)
+                         VALUES (${row.id}, ${page.id}, ${i}, ${JSON.stringify(row.cells ?? {})}, ${Number(page.created_at)}, ${now})`
+            }
+            await tx`UPDATE pages SET content = ${JSON.stringify(schema)} WHERE id = ${page.id}`
+        })
     }
 }
