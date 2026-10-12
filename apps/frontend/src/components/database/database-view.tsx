@@ -24,6 +24,7 @@ import {
     formatDate,
     newFilter,
     optionsFromValues,
+    personIds,
     searchRows,
     type CellValue,
     type DatabaseData,
@@ -32,7 +33,7 @@ import {
     type Row,
     type SelectOption,
 } from "./model"
-import { DatePicker, OptionPicker } from "./editors"
+import { DatePicker, OptionPicker, PersonName } from "./editors"
 import { DatabaseToolbar, FilterSortBar, type ControlsState } from "./controls"
 import {
     MenuItem,
@@ -42,12 +43,20 @@ import {
     Checkbox,
     OptionChip,
     PropertyIcon,
-    Avatar,
 } from "@/components/pereskia"
 import { usePeopleView } from "./use-people-view"
 
 type Update = (fn: (data: DatabaseData) => DatabaseData) => void
 type CellRef = { rowId: string; propertyId: string }
+
+// Inline tables break out of the document's text column to the page's full width, like Notion's.
+const PAGE_PADDING = "max(24px, min(96px, 8vw))"
+const INLINE_BREAKOUT: React.CSSProperties = {
+    width: "100cqw",
+    marginLeft: `calc((min(100cqw, 900px) - 100cqw) / 2 - ${PAGE_PADDING})`,
+    paddingLeft: `max(56px, ${PAGE_PADDING})`,
+    paddingRight: PAGE_PADDING,
+}
 
 const ADD_COLUMN_WIDTH = 36
 const MIN_COLUMN_WIDTH = 60
@@ -139,7 +148,10 @@ export function DatabaseView({
             />
             <FilterSortBar data={data} update={onChange} state={controls} setState={setControls} />
 
-            <div className="pk-scroller -ml-14 overflow-x-auto pb-3 pl-14">
+            <div
+                className={cn("pk-scroller overflow-x-auto pb-3", variant === "page" && "-ml-14 pl-14")}
+                style={variant === "inline" ? INLINE_BREAKOUT : undefined}
+            >
                 <table className="table-fixed border-collapse" style={{ width: tableWidth }}>
                     <colgroup>
                         {data.properties.map((p) => (
@@ -700,8 +712,8 @@ export function Cell({
                         <OptionPicker
                             property={property}
                             selected={Array.isArray(value) ? value : value ? [value as string] : []}
-                            multi={property.type === "multiSelect"}
-                            onChange={(ids) => onChange(property.type === "multiSelect" ? ids : (ids[0] ?? null))}
+                            multi={property.type === "multiSelect" || property.type === "person"}
+                            onChange={(ids) => onChange(property.type === "multiSelect" || property.type === "person" ? ids : (ids[0] ?? null))}
                             onDone={() => onEdit(false)}
                             allowCreate={property.type !== "person"}
                             onOptionsChange={property.type === "person" ? undefined : onOptionsChange}
@@ -740,7 +752,7 @@ function CellDisplay({
         }
         case "multiSelect":
             return (
-                <span className="flex min-w-0 gap-1.5 overflow-hidden">
+                <span className="flex min-w-0 flex-wrap gap-1.5">
                     {((value as string[]) ?? []).map((id) => {
                         const option = property.options?.find((o) => o.id === id)
                         return option ? <OptionChip key={id} option={option} isStatus={false} /> : null
@@ -751,15 +763,15 @@ function CellDisplay({
             return value ? <span className="truncate whitespace-nowrap">{formatDate(value as string)}</span> : null
         case "checkbox":
             return <Checkbox checked={value === true} onChange={onChange} />
-        case "person": {
-            const person = property.options?.find((o) => o.id === value)
-            return person ? (
-                <span className="flex min-w-0 items-center gap-1.5">
-                    <Avatar name={person.name} seed={person.id} size={20} />
-                    <span className="truncate">{person.name}</span>
+        case "person":
+            return (
+                <span className="flex min-w-0 flex-wrap gap-x-2.5 gap-y-1">
+                    {personIds(value).map((id) => {
+                        const person = property.options?.find((o) => o.id === id)
+                        return person ? <PersonName key={id} option={person} /> : null
+                    })}
                 </span>
-            ) : null
-        }
+            )
     }
 }
 

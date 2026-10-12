@@ -5,6 +5,7 @@ import {
     addComment,
     applyRowChanges,
     categoryOf,
+    personIds,
     statusOption,
     taskContext,
     taskObject,
@@ -204,9 +205,9 @@ async function taskCells(ctx: TaskContext, token: ServiceToken, input: Record<st
     pick("status", "status", input.status)
     if (input.assignee_id !== undefined) {
         if (!fields.assignee) errors.assignee_id = "this project has no such field"
-        else if (input.assignee_id === null) cells[fields.assignee.id] = null
+        else if (input.assignee_id === null) cells[fields.assignee.id] = []
         else if (!(await workspacePeople(token.workspaceId)).has(input.assignee_id)) errors.assignee_id = "not found"
-        else cells[fields.assignee.id] = input.assignee_id
+        else cells[fields.assignee.id] = [input.assignee_id]
     }
     if (input.due_date !== undefined) {
         if (input.due_date !== null && !DATE.test(input.due_date)) errors.due_date = "must be YYYY-MM-DD"
@@ -370,7 +371,7 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
                 const c = row.cells
                 if (categories && !categories.includes(categoryOf(statusOption(ctx.fields, c)))) return false
                 if (query.type && (!ctx.fields.type || c[ctx.fields.type.id] !== query.type)) return false
-                if (query.assignee_id && (!ctx.fields.assignee || c[ctx.fields.assignee.id] !== query.assignee_id)) return false
+                if (query.assignee_id && (!ctx.fields.assignee || !personIds(c[ctx.fields.assignee.id]).includes(query.assignee_id))) return false
                 if (query.external_source && (row.externalRef as any)?.source !== query.external_source) return false
                 return true
             }

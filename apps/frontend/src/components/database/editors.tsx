@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react"
 import { nanoid } from "nanoid"
 import { cn } from "cn"
-import { Check, ChevronLeft, ChevronRight, Ellipsis, GripVertical, Trash2 } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, Ellipsis, GripVertical, Trash2, X } from "lucide-react"
 import {
     STATUS_GROUP_LABELS,
     TAG_COLORS,
@@ -24,7 +24,30 @@ import {
     Checkbox,
     OptionChip,
     Input,
+    Avatar,
 } from "@/components/pereskia"
+
+export function PersonName({ option, onRemove }: { option: SelectOption; onRemove?: () => void }) {
+    return (
+        <span className="flex min-w-0 items-center gap-1.5">
+            <Avatar name={option.name} seed={option.id} size={20} />
+            <span className="truncate">{option.name}</span>
+            {onRemove && (
+                <button
+                    type="button"
+                    aria-label="Remove"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        onRemove()
+                    }}
+                    className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm opacity-50 hover:opacity-100"
+                >
+                    <X className="size-3" strokeWidth={2.5} />
+                </button>
+            )}
+        </span>
+    )
+}
 
 type OptionPickerProps = {
     property: Property
@@ -53,6 +76,7 @@ export function OptionPicker({
     const [highlight, setHighlight] = useState(0)
     const [createColor, setCreateColor] = useState<TagColor>(randomTagColor)
     const isStatus = property.type === "status"
+    const isPerson = property.type === "person"
     const options = property.options ?? []
     const byId = new Map(options.map((o) => [o.id, o]))
 
@@ -138,6 +162,7 @@ export function OptionPicker({
                 key={option.id}
                 option={option}
                 isStatus={isStatus}
+                isPerson={isPerson}
                 highlighted={highlight === index}
                 selected={isSelected}
                 showCheckbox={showCheckboxes}
@@ -176,6 +201,7 @@ export function OptionPicker({
                 {selected.map((id) => {
                     const option = byId.get(id)
                     if (!option) return null
+                    if (isPerson) return <PersonName key={id} option={option} onRemove={() => onChange(selected.filter((s) => s !== id))} />
                     return (
                         <OptionChip
                             key={id}
@@ -193,14 +219,14 @@ export function OptionPicker({
                         setHighlight(0)
                     }}
                     onKeyDown={onKeyDown}
-                    placeholder={selected.length ? "" : allowCreate ? "Search for an option..." : "Search options..."}
+                    placeholder={selected.length ? "" : isPerson ? "Search for people..." : allowCreate ? "Search for an option..." : "Search options..."}
                     className="h-5 min-w-[60px] flex-1 bg-transparent text-sm outline-none placeholder:text-(--pk-text-tertiary)"
                 />
             </div>
             <div className="flex flex-col gap-px p-1">
                 {!isStatus && (
                     <div className="px-2 pt-1 pb-1 text-xs text-(--pk-text-secondary) select-none">
-                        {allowCreate ? "Select an option or create one" : "Select options"}
+                        {isPerson ? "Select as many as you like" : allowCreate ? "Select an option or create one" : "Select options"}
                     </div>
                 )}
                 {list}
@@ -215,6 +241,7 @@ export function OptionPicker({
 function OptionRow({
     option,
     isStatus,
+    isPerson,
     highlighted,
     selected,
     showCheckbox,
@@ -226,6 +253,7 @@ function OptionRow({
 }: {
     option: SelectOption
     isStatus: boolean
+    isPerson: boolean
     highlighted: boolean
     selected: boolean
     showCheckbox: boolean
@@ -253,10 +281,10 @@ function OptionRow({
             {showCheckbox ? (
                 <Checkbox checked={selected} onChange={onClick} />
             ) : (
-                <GripVertical className="size-4 shrink-0 text-(--pk-text-tertiary)" strokeWidth={1.75} />
+                !isPerson && <GripVertical className="size-4 shrink-0 text-(--pk-text-tertiary)" strokeWidth={1.75} />
             )}
             <span className="flex min-w-0 flex-1">
-                <OptionChip option={option} isStatus={isStatus} />
+                {isPerson ? <PersonName option={option} /> : <OptionChip option={option} isStatus={isStatus} />}
             </span>
             {selected && !showCheckbox && <Check className="size-4 shrink-0 text-(--pk-text)" strokeWidth={2} />}
             {editable && (

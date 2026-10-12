@@ -1,6 +1,7 @@
 import type { SQL } from "bun"
 import { mkdir } from "node:fs/promises"
 import { dirname } from "node:path"
+import { insertImportedRows } from "./rows"
 import { dialectOf, openConnection, type ConnectionInput, type Dialect, type Provider } from "./connection"
 
 let current: { sql: SQL; dialect: Dialect; provider: Provider } | null = null
@@ -198,12 +199,8 @@ async function moveDatabaseRowsOutOfContent(sql: SQL) {
         const content = page.content ? JSON.parse(page.content) : null
         if (!Array.isArray(content?.rows)) continue
         const { rows, ...schema } = content
-        const now = Date.now()
         await sql.begin(async (tx) => {
-            for (const [i, row] of rows.entries()) {
-                await tx`INSERT INTO database_rows (id, page_id, position, cells, created_at, updated_at)
-                         VALUES (${row.id}, ${page.id}, ${i}, ${JSON.stringify(row.cells ?? {})}, ${Number(page.created_at)}, ${now})`
-            }
+            await insertImportedRows(tx, page.id, rows, Number(page.created_at))
             await tx`UPDATE pages SET content = ${JSON.stringify(schema)} WHERE id = ${page.id}`
         })
     }

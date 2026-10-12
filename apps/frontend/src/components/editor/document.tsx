@@ -42,7 +42,7 @@ export function Document({ page, save }: { page: Page; save: (patch: PagePatch) 
     const initialBlocks = Array.isArray(page.content) ? (page.content as Block[]) : undefined
 
     return (
-        <div className="pk-root pb-[30vh]">
+        <div className="pk-root @container pb-[30vh]">
             {cover && (
                 <div className="group/cover relative h-[30vh] max-h-[280px] min-h-[120px]" style={{ background: COVERS[cover] ?? cover }}>
                     <div className="absolute right-[max(24px,min(96px,8vw))] bottom-3 flex overflow-hidden rounded-md bg-(--pk-popover) text-xs text-(--pk-text-secondary) opacity-0 shadow-(--pk-popover-shadow) transition-opacity group-hover/cover:opacity-100">

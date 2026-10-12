@@ -15,6 +15,7 @@ import { notionImportRoutes } from './routes/notionImport'
 import { instanceRoutes } from './routes/instance'
 import { trackerErrorResponse, trackerRoutes } from './routes/tracker'
 import { databaseRoutes } from './routes/databases'
+import { backfillStartedAt } from './rows'
 import { trackerAdminRoutes } from './routes/trackerAdmin'
 
 const config = await loadConfig()
@@ -23,6 +24,7 @@ if (config.storage) {
   try {
     await connectStorage(config.storage)
     console.log(`Storage: ${config.storage.provider}`)
+    await backfillStartedAt()
   } catch (err) {
     console.error('Could not connect to the configured storage database:', err)
     process.exit(1)

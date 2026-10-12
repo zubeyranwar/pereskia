@@ -129,6 +129,10 @@ export async function taskContext(pageId: string): Promise<TaskContext | null> {
     return { schema: db.schema, fields: trackerFields(db.schema), tracker, people: await workspacePeople(db.workspaceId) }
 }
 
+// Person cells hold a list of user ids (older ones a single id); the spec's assignee is the first person.
+export const personIds = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : typeof value === "string" && value ? [value] : []
+
 const iso = (ms: number | null) => (ms == null ? null : new Date(ms).toISOString())
 const personOf = (people: Map<string, Person>, id: unknown) => {
     const p = typeof id === "string" ? people.get(id) : undefined
@@ -162,7 +166,7 @@ export function taskObject(ctx: TaskContext, row: RowRecord) {
         description: row.body,
         status: statusSnapshot(status),
         priority: prioritySnapshot(fields.priority, optionById(fields.priority, c)),
-        assignee: fields.assignee ? personOf(people, c[fields.assignee.id]) : null,
+        assignee: fields.assignee ? personOf(people, personIds(c[fields.assignee.id])[0]) : null,
         reporter,
         labels: labelIds.map((id) => fields.labels!.options?.find((o) => o.id === id)?.name).filter(Boolean),
         due_date: fields.due && typeof c[fields.due.id] === "string" ? (c[fields.due.id] as string) : null,
@@ -198,11 +202,16 @@ export async function getRow(rowId: string) {
     return r ? toRow(r) : null
 }
 
-export async function insertImportedRows(tx: SQL, pageId: string, rows: { id: string; cells: Cells }[]) {
+// Row ids only have to be unique within one database; a copied or re-imported database gets fresh ids where they clash.
+export async function insertImportedRows(tx: SQL, pageId: string, rows: { id: string; cells: Cells }[], createdAt = Date.now()) {
     const now = Date.now()
+    const ids = rows.map((r) => r.id).filter(Boolean)
+    const taken = new Set<string>(ids.length ? (await tx`SELECT id FROM database_rows WHERE id IN ${tx(ids)}`).map((r: any) => r.id) : [])
     for (const [i, row] of rows.entries()) {
+        const id = !row.id || taken.has(row.id) ? crypto.randomUUID() : row.id
+        taken.add(id)
         await tx`INSERT INTO database_rows (id, page_id, position, cells, created_at, updated_at)
-                 VALUES (${row.id || crypto.randomUUID()}, ${pageId}, ${i}, ${JSON.stringify(row.cells ?? {})}, ${now}, ${now})`
+                 VALUES (${id}, ${pageId}, ${i}, ${JSON.stringify(row.cells ?? {})}, ${createdAt}, ${now})`
     }
 }
 
@@ -255,7 +264,7 @@ export async function applyRowChanges(pageId: string, changes: RowChanges, actor
 
     const historyFields: { name: string; property: Property | undefined; snapshot: (cells: Cells) => unknown }[] = [
         { name: "status", property: fields.status, snapshot: (c) => statusSnapshot(statusOption(fields, c)) },
-        { name: "assignee", property: fields.assignee, snapshot: (c) => (fields.assignee ? personSnapshot(c[fields.assignee.id]) : null) },
+        { name: "assignee", property: fields.assignee, snapshot: (c) => (fields.assignee ? personSnapshot(personIds(c[fields.assignee.id])[0]) : null) },
         { name: "priority", property: fields.priority, snapshot: (c) => prioritySnapshot(fields.priority, optionById(fields.priority, c)) },
         { name: "due_date", property: fields.due, snapshot: (c) => (fields.due ? (c[fields.due.id] ?? null) : null) },
     ]
@@ -415,6 +424,25 @@ export function toHistory(r: any, people: Map<string, Person>) {
         from: r.from_value ? JSON.parse(r.from_value) : null,
         to: r.to_value ? JSON.parse(r.to_value) : null,
         actor: personOf(people, r.actor_id) ?? (r.actor_email ? { id: null, name: null, email: r.actor_email } : null),
+    }
+}
+
+// Tasks already in progress when tracking began, or moved into an in-progress group later, have no start time yet.
+export async function backfillStartedAt(pageId?: string) {
+    const { sql } = storage()
+    const pages = pageId ? [pageId] : (await sql`SELECT page_id FROM tracker_databases`).map((r: any) => r.page_id as string)
+    const now = Date.now()
+    for (const id of pages) {
+        const db = await loadDatabase(id)
+        if (!db) continue
+        const fields = trackerFields(db.schema)
+        const rows = await sql`SELECT id, cells FROM database_rows WHERE page_id = ${id} AND started_at IS NULL AND deleted_at IS NULL`
+        for (const row of rows) {
+            const category = categoryOf(statusOption(fields, JSON.parse(row.cells)))
+            if (category === "in_progress" || category === "blocked") {
+                await sql`UPDATE database_rows SET started_at = ${now}, updated_at = ${now} WHERE id = ${row.id}`
+            }
+        }
     }
 }
 

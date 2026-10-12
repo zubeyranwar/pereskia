@@ -138,6 +138,8 @@ export function RowPanel({
                             <ReadOnlyProperty label="Reported by" value={personName(detail.reporter)} />
                         )}
                         {detail && <ReadOnlyProperty label="Created" value={when(detail.createdAt)} />}
+                        {detail?.startedAt && <ReadOnlyProperty label="Started" value={when(detail.startedAt)} />}
+                        {detail?.completedAt && <ReadOnlyProperty label="Completed" value={when(detail.completedAt)} />}
                     </div>
 
                     <div className="my-6 h-px bg-(--pk-divider)" />

@@ -4,6 +4,7 @@ import { HttpError, SESSION_COOKIE, requirePageAccess, requireRole, userForSessi
 import {
     addComment,
     applyRowChanges,
+    backfillStartedAt,
     getRow,
     loadDatabase,
     nextNumber,
@@ -119,6 +120,7 @@ export const databaseRoutes = new Elysia({ prefix: "/api/databases" })
                     await tx`UPDATE database_rows SET num = ${await nextNumber(tx, params.id)} WHERE id = ${row.id}`
                 }
             })
+            await backfillStartedAt(params.id)
             return { connected: true, projectKey: body.projectKey }
         },
         { body: t.Object({ projectKey: t.String({ pattern: "^[A-Z][A-Z0-9]{1,9}$" }) }) },
