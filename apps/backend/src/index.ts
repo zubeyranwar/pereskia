@@ -14,6 +14,7 @@ import { importRoutes } from './routes/import'
 import { notionImportRoutes } from './routes/notionImport'
 import { instanceRoutes } from './routes/instance'
 import { trackerRoutes } from './routes/tracker'
+import { trackerAdminRoutes } from './routes/trackerAdmin'
 
 const config = await loadConfig()
 loadEmailConfig(config)
@@ -70,6 +71,7 @@ app
   .use(notionImportRoutes)
   .use(instanceRoutes)
   .use(trackerRoutes)
+  .use(trackerAdminRoutes)
 
 if (hasStatic) {
   app.get('/*', async ({ path }) => {
