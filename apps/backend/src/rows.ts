@@ -325,7 +325,10 @@ export async function applyRowChanges(pageId: string, changes: RowChanges, actor
                 await record(up.id, h.name, from, to)
                 eventChanges[h.name] = { from, to }
             }
-            const times = lifecycle(categoryOf(statusOption(fields, cells)), existing, now)
+            // Only a change of status category moves the start/completion times; other edits keep them.
+            const before = categoryOf(statusOption(fields, existing.cells))
+            const after = categoryOf(statusOption(fields, cells))
+            const times = before === after ? existing : lifecycle(after, existing, now)
             await tx`UPDATE database_rows SET cells = ${JSON.stringify(cells)}, body = ${bodyChanged ? (up.body ?? null) : existing.body},
                                               position = ${position}, started_at = ${times.startedAt},
                                               completed_at = ${times.completedAt}, updated_at = ${now}
@@ -427,7 +430,8 @@ export function toHistory(r: any, people: Map<string, Person>) {
     }
 }
 
-// Tasks already in progress when tracking began, or moved into an in-progress group later, have no start time yet.
+// Keeps start/completion times honest for tracker tasks: tasks already in progress when tracking began get a start
+// time, and a completion time no recorded status change backs up (e.g. a task finished before tracking) is cleared.
 export async function backfillStartedAt(pageId?: string) {
     const { sql } = storage()
     const pages = pageId ? [pageId] : (await sql`SELECT page_id FROM tracker_databases`).map((r: any) => r.page_id as string)
@@ -436,11 +440,19 @@ export async function backfillStartedAt(pageId?: string) {
         const db = await loadDatabase(id)
         if (!db) continue
         const fields = trackerFields(db.schema)
-        const rows = await sql`SELECT id, cells FROM database_rows WHERE page_id = ${id} AND started_at IS NULL AND deleted_at IS NULL`
+        const rows = await sql`SELECT id, cells, started_at, completed_at FROM database_rows WHERE page_id = ${id} AND deleted_at IS NULL`
+        const finishedIn = new Set<string>()
+        for (const h of await sql`SELECT row_id, to_value FROM row_history WHERE page_id = ${id} AND field = 'status'`) {
+            const category = h.to_value ? JSON.parse(h.to_value).category : null
+            if (category === "done" || category === "cancelled") finishedIn.add(h.row_id)
+        }
         for (const row of rows) {
             const category = categoryOf(statusOption(fields, JSON.parse(row.cells)))
-            if (category === "in_progress" || category === "blocked") {
+            if (row.started_at == null && (category === "in_progress" || category === "blocked")) {
                 await sql`UPDATE database_rows SET started_at = ${now}, updated_at = ${now} WHERE id = ${row.id}`
+            }
+            if (row.completed_at != null && !finishedIn.has(row.id)) {
+                await sql`UPDATE database_rows SET completed_at = NULL, updated_at = ${now} WHERE id = ${row.id}`
             }
         }
     }
