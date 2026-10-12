@@ -441,7 +441,7 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
         if (query.assignee_id) conditions.push(`t.assignee_id = ${bind(query.assignee_id)}`)
         if (query.external_source) {
             const extCond = dialect === "postgres"
-                ? `t.external_ref->>'source' = ${bind(query.external_source)}`
+                ? `t.external_ref::jsonb->>'source' = ${bind(query.external_source)}`
                 : `json_extract(t.external_ref, '$.source') = ${bind(query.external_source)}`
             conditions.push(`t.external_ref IS NOT NULL AND ${extCond}`)
         }
