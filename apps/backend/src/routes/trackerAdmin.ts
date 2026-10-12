@@ -1,8 +1,7 @@
 import { Elysia, t } from "elysia"
-import { authPlugin } from "../auth"
 import { storage } from "../storage"
 import { createServiceToken } from "./tracker"
-import { hashToken } from "../auth"
+import { userForSession, SESSION_COOKIE, HttpError } from "../auth"
 
 const SEED_STATUSES = [
     { id: "s-todo",      name: "To do",       category: "todo",        order: 0 },
@@ -23,13 +22,19 @@ const SEED_PRIORITIES = [
     { id: "p-low",    name: "Low",    rank: 4 },
 ]
 
-export const trackerAdminRoutes = new Elysia({ prefix: "/api/tracker-admin" })
-    .use(authPlugin)
+async function requireSession(cookie: Record<string, any>) {
+    const token = cookie[SESSION_COOKIE]?.value as string | undefined
+    const user = await userForSession(token)
+    if (!user) throw new HttpError(401, "You need to sign in.")
+    return user
+}
 
-    // POST /api/tracker-admin/token — create a service token (session auth required)
+export const trackerAdminRoutes = new Elysia({ prefix: "/api/tracker-admin" })
+
     .post(
         "/token",
-        async ({ user, body }) => {
+        async ({ cookie, body }) => {
+            const user = await requireSession(cookie)
             const result = await createServiceToken(
                 body.name,
                 body.workspace_id,
@@ -44,7 +49,6 @@ export const trackerAdminRoutes = new Elysia({ prefix: "/api/tracker-admin" })
             }
         },
         {
-            auth: true,
             body: t.Object({
                 name: t.String(),
                 workspace_id: t.String(),
@@ -53,30 +57,28 @@ export const trackerAdminRoutes = new Elysia({ prefix: "/api/tracker-admin" })
         },
     )
 
-    // POST /api/tracker-admin/seed — seed a default project + fields (session auth required)
     .post(
         "/seed",
-        async ({ user, body }) => {
+        async ({ cookie, body }) => {
+            const user = await requireSession(cookie)
             const { sql } = storage()
             const now = Date.now()
             const projectId = body.project_id ?? `proj-${crypto.randomUUID().slice(0, 8)}`
             const projectKey = body.project_key ?? "ENG"
             const projectName = body.project_name ?? "Engineering"
 
-            // Project
             await sql`INSERT INTO tracker_projects (id, key, name, archived, next_task_num, created_at)
                       VALUES (${projectId}, ${projectKey}, ${projectName}, 0, 1, ${now})
                       ON CONFLICT (id) DO NOTHING`
 
-            // Fields
             for (const s of SEED_STATUSES) {
                 await sql`INSERT INTO tracker_statuses (id, project_id, name, category, order_num)
                           VALUES (${s.id + "-" + projectId.slice(-4)}, ${projectId}, ${s.name}, ${s.category}, ${s.order})
                           ON CONFLICT (id) DO NOTHING`
             }
-            for (const t of SEED_TYPES) {
+            for (const tp of SEED_TYPES) {
                 await sql`INSERT INTO tracker_types (id, project_id, name)
-                          VALUES (${t.id + "-" + projectId.slice(-4)}, ${projectId}, ${t.name})
+                          VALUES (${tp.id + "-" + projectId.slice(-4)}, ${projectId}, ${tp.name})
                           ON CONFLICT (id) DO NOTHING`
             }
             for (const p of SEED_PRIORITIES) {
@@ -85,7 +87,6 @@ export const trackerAdminRoutes = new Elysia({ prefix: "/api/tracker-admin" })
                           ON CONFLICT (id) DO NOTHING`
             }
 
-            // Add current user as a tracker member
             await sql`INSERT INTO tracker_members (id, name, email, active, created_at)
                       VALUES (${user.id}, ${user.name}, ${user.email}, 1, ${now})
                       ON CONFLICT (id) DO NOTHING`
@@ -100,7 +101,6 @@ export const trackerAdminRoutes = new Elysia({ prefix: "/api/tracker-admin" })
             }
         },
         {
-            auth: true,
             body: t.Object({
                 project_id: t.Optional(t.String()),
                 project_key: t.Optional(t.String()),
