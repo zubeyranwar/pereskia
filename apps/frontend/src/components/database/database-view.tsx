@@ -85,19 +85,24 @@ export function DatabaseView({
     const [editing, setEditing] = useState<CellRef | null>(null)
     const [openHeaderId, setOpenHeaderId] = useState<string | null>(null)
 
-    const visibleRows = applySorts(data, searchRows(data, applyFilters(data, data.rows), search))
+    const [createdRowIds, setCreatedRowIds] = useState<Set<string>>(() => new Set())
+
+    const filtered = new Set(applyFilters(data, data.rows).map((r) => r.id))
+    const shownRows = data.rows.filter((r) => filtered.has(r.id) || createdRowIds.has(r.id))
+    const visibleRows = applySorts(data, searchRows(data, shownRows, search))
     const tableWidth = data.properties.reduce((sum, p) => sum + p.width, 0) + ADD_COLUMN_WIDTH
     const titleProperty = data.properties.find((p) => p.type === "title")
 
     const addRow = (index?: number) => {
         const cells: Record<string, CellValue> = {}
-        for (const f of data.filters) {
+        const rules = [...data.filters, ...(data.advancedFilter?.conjunction === "and" ? data.advancedFilter.rules : [])]
+        for (const f of rules) {
             const p = data.properties.find((x) => x.id === f.propertyId)
-            if (!p || f.value === null) continue
+            if (!p || f.value === null || p.id in cells) continue
             const values = Array.isArray(f.value) ? f.value : []
-            if ((p.type === "select" || p.type === "status") && f.operator === "is" && values.length === 1) {
+            if ((p.type === "select" || p.type === "status") && f.operator === "is" && values.length) {
                 cells[p.id] = values[0]
-            } else if (p.type === "multiSelect" && f.operator === "contains" && values.length) {
+            } else if ((p.type === "multiSelect" || p.type === "person") && f.operator === "contains" && values.length) {
                 cells[p.id] = [values[0]]
             } else if (p.type === "checkbox" && f.operator === "is") {
                 cells[p.id] = f.value
@@ -111,6 +116,7 @@ export function DatabaseView({
             rows.splice(index ?? rows.length, 0, row)
             return { ...d, rows }
         })
+        setCreatedRowIds((ids) => new Set(ids).add(row.id))
         if (titleProperty) setEditing({ rowId: row.id, propertyId: titleProperty.id })
     }
 
