@@ -1,6 +1,15 @@
 import { Elysia, t } from "elysia"
 import { storage } from "../storage"
 import { HttpError, hashToken } from "../auth"
+import type { Dialect } from "../connection"
+
+// Returns a binder that produces dialect-correct placeholders ($1/$2/... for Postgres, ? for others)
+function makeBind(dialect: Dialect) {
+    let n = 0
+    const params: unknown[] = []
+    const bind = (v: unknown) => { params.push(v); return dialect === "postgres" ? `$${++n}` : "?" }
+    return { params, bind }
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -73,21 +82,14 @@ async function saveIdempotency(key: string | null | undefined, bHash: string, st
     const kHash = hashToken(key)
     const now = Date.now()
     const responseJson = JSON.stringify(body)
+    const { params, bind } = makeBind(dialect)
+    const p = [kHash, bHash, responseJson, status, now].map(v => bind(v)).join(", ")
     if (dialect === "mysql") {
-        await sql.unsafe(
-            `INSERT IGNORE INTO tracker_idempotency_keys (key_hash, body_hash, response, status_code, created_at) VALUES (?, ?, ?, ?, ?)`,
-            [kHash, bHash, responseJson, status, now],
-        )
+        await sql.unsafe(`INSERT IGNORE INTO tracker_idempotency_keys (key_hash, body_hash, response, status_code, created_at) VALUES (${p})`, params)
     } else if (dialect === "postgres") {
-        await sql.unsafe(
-            `INSERT INTO tracker_idempotency_keys (key_hash, body_hash, response, status_code, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (key_hash) DO NOTHING`,
-            [kHash, bHash, responseJson, status, now],
-        )
+        await sql.unsafe(`INSERT INTO tracker_idempotency_keys (key_hash, body_hash, response, status_code, created_at) VALUES (${p}) ON CONFLICT (key_hash) DO NOTHING`, params)
     } else {
-        await sql.unsafe(
-            `INSERT OR IGNORE INTO tracker_idempotency_keys (key_hash, body_hash, response, status_code, created_at) VALUES (?, ?, ?, ?, ?)`,
-            [kHash, bHash, responseJson, status, now],
-        )
+        await sql.unsafe(`INSERT OR IGNORE INTO tracker_idempotency_keys (key_hash, body_hash, response, status_code, created_at) VALUES (${p})`, params)
     }
 }
 
@@ -419,34 +421,35 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
         const retryAfter = checkTrackerRateLimit(token.id)
         if (retryAfter) { set.status = 429; set.headers["Retry-After"] = String(retryAfter); return trackerError("rate_limited", "Too many requests") }
         requireScope(token, "tasks:read")
-        const { sql } = storage()
+        const { sql, dialect } = storage()
         const limit = Math.min(Number(query.limit ?? 50), 100)
         const cursor = decodeCursor(query.cursor)
         const cursorU = cursor?.u ?? 0
         const cursorI = cursor?.i ?? ""
 
-        // Build WHERE conditions using ? placeholders (works for SQLite, MySQL, Postgres via Bun.sql)
+        const { params, bind } = makeBind(dialect)
         const conditions: string[] = []
-        const params: unknown[] = []
-        const bind = (v: unknown) => { params.push(v); return "?" }
 
         if (query.project_id) conditions.push(`t.project_id = ${bind(query.project_id)}`)
         if (query.updated_since) conditions.push(`t.updated_at >= ${bind(new Date(query.updated_since).getTime())}`)
         if (query.include_deleted !== "true") conditions.push(`t.deleted_at IS NULL`)
         if (query.status_category) {
             const cats = query.status_category.split(",").map((c: string) => c.trim())
-            const catPlaceholders = cats.map((c) => bind(c)).join(", ")
-            conditions.push(`s.category IN (${catPlaceholders})`)
+            conditions.push(`s.category IN (${cats.map(c => bind(c)).join(", ")})`)
         }
         if (query.type) conditions.push(`t.type_id = ${bind(query.type)}`)
         if (query.assignee_id) conditions.push(`t.assignee_id = ${bind(query.assignee_id)}`)
-        if (query.external_source) conditions.push(`t.external_ref IS NOT NULL AND json_extract(t.external_ref, '$.source') = ${bind(query.external_source)}`)
+        if (query.external_source) {
+            const extCond = dialect === "postgres"
+                ? `t.external_ref->>'source' = ${bind(query.external_source)}`
+                : `json_extract(t.external_ref, '$.source') = ${bind(query.external_source)}`
+            conditions.push(`t.external_ref IS NOT NULL AND ${extCond}`)
+        }
+        const c1 = bind(cursorU), c2 = bind(cursorU), c3 = bind(cursorI)
+        conditions.push(`(t.updated_at > ${c1} OR (t.updated_at = ${c2} AND t.id > ${c3}))`)
 
-        // Cursor condition (duplicate cursorU for the equality branch)
-        conditions.push(`(t.updated_at > ${bind(cursorU)} OR (t.updated_at = ${bind(cursorU)} AND t.id > ${bind(cursorI)}))`)
-
-        const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""
-        params.push(limit + 1)
+        const where = `WHERE ${conditions.join(" AND ")}`
+        const limitP = bind(limit + 1)
 
         const rows = await sql.unsafe(`
             SELECT t.*,
@@ -463,7 +466,7 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
             LEFT JOIN tracker_members rep ON rep.id = t.reporter_id
             ${where}
             ORDER BY t.updated_at ASC, t.id ASC
-            LIMIT ?
+            LIMIT ${limitP}
         `, params)
 
         const hasMore = rows.length > limit
@@ -504,20 +507,21 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
         const retryAfter = checkTrackerRateLimit(token.id)
         if (retryAfter) { set.status = 429; set.headers["Retry-After"] = String(retryAfter); return trackerError("rate_limited", "Too many requests") }
         requireScope(token, "tasks:read")
-        const { sql } = storage()
+        const { sql, dialect } = storage()
         const limit = Math.min(Number(query.limit ?? 50), 100)
         const sinceMs = query.since ? new Date(query.since).getTime() : 0
         const cursor = decodeCursor(query.cursor)
         const cursorU = cursor?.u ?? 0
         const cursorI = cursor?.i ?? ""
 
-        const conditions: string[] = [`(h.at > ? OR (h.at = ? AND h.id > ?))`]
-        const params: unknown[] = [cursorU, cursorU, cursorI]
-        if (query.project_id) { conditions.push("t.project_id = ?"); params.push(query.project_id) }
-        if (sinceMs) { conditions.push("h.at > ?"); params.push(sinceMs) }
+        const { params, bind } = makeBind(dialect)
+        const c1 = bind(cursorU), c2 = bind(cursorU), c3 = bind(cursorI)
+        const conditions: string[] = [`(h.at > ${c1} OR (h.at = ${c2} AND h.id > ${c3}))`]
+        if (query.project_id) conditions.push(`t.project_id = ${bind(query.project_id)}`)
+        if (sinceMs) conditions.push(`h.at > ${bind(sinceMs)}`)
 
         const where = `WHERE ${conditions.join(" AND ")}`
-        params.push(limit + 1)
+        const limitP = bind(limit + 1)
 
         const rows = await sql.unsafe(`
             SELECT h.*, m.name AS actor_name, m.email AS actor_email
@@ -526,7 +530,7 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
             LEFT JOIN tracker_members m ON m.id = h.actor_id
             ${where}
             ORDER BY h.at ASC, h.id ASC
-            LIMIT ?
+            LIMIT ${limitP}
         `, params)
 
         const hasMore = rows.length > limit
@@ -559,21 +563,22 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
         const retryAfter = checkTrackerRateLimit(token.id)
         if (retryAfter) { set.status = 429; set.headers["Retry-After"] = String(retryAfter); return trackerError("rate_limited", "Too many requests") }
         requireScope(token, "tasks:read")
-        const { sql } = storage()
+        const { sql, dialect } = storage()
         const [task] = await sql`SELECT id FROM tracker_tasks WHERE id = ${params.task_id}`
         if (!task) throw new HttpError(404, "not_found")
         const limit = Math.min(Number(query.limit ?? 50), 100)
         const cursor = decodeCursor(query.cursor)
         const cursorU = cursor?.u ?? 0
         const cursorI = cursor?.i ?? ""
+        const { params: qp, bind } = makeBind(dialect)
         const rows = await sql.unsafe(`
             SELECT c.*, m.name AS author_name, m.email AS author_member_email
             FROM tracker_comments c
             LEFT JOIN tracker_members m ON m.id = c.author_id
-            WHERE c.task_id = ? AND (c.created_at > ? OR (c.created_at = ? AND c.id > ?))
+            WHERE c.task_id = ${bind(params.task_id)} AND (c.created_at > ${bind(cursorU)} OR (c.created_at = ${bind(cursorU)} AND c.id > ${bind(cursorI)}))
             ORDER BY c.created_at ASC, c.id ASC
-            LIMIT ?
-        `, [params.task_id, cursorU, cursorU, cursorI, limit + 1])
+            LIMIT ${bind(limit + 1)}
+        `, qp)
         const hasMore = rows.length > limit
         const data = rows.slice(0, limit).map((r: any) => ({
             id: r.id,
@@ -602,7 +607,7 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
         const cached = await checkIdempotency(ikey, bHash)
         if (cached) { set.status = cached.status; return cached.body }
 
-        const { sql } = storage()
+        const { sql, dialect } = storage()
         const [task] = await sql`SELECT * FROM tracker_tasks WHERE id = ${params.task_id} AND deleted_at IS NULL`
         if (!task) throw new HttpError(404, "not_found")
 
@@ -623,7 +628,7 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
         const [cRow] = await sql.unsafe(`
             SELECT c.*, m.name AS author_name, m.email AS author_member_email
             FROM tracker_comments c LEFT JOIN tracker_members m ON m.id = c.author_id
-            WHERE c.id = ?
+            WHERE c.id = ${dialect === "postgres" ? "$1" : "?"}
         `, [id])
         const comment = {
             id: cRow.id,
@@ -696,47 +701,47 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
         const retryAfter = checkTrackerRateLimit(token.id)
         if (retryAfter) { set.status = 429; set.headers["Retry-After"] = String(retryAfter); return trackerError("rate_limited", "Too many requests") }
         requireScope(token, "tasks:write")
-        const { sql } = storage()
+        const { sql, dialect } = storage()
         const [task] = await sql`SELECT * FROM tracker_tasks WHERE id = ${params.task_id} AND deleted_at IS NULL`
         if (!task) throw new HttpError(404, "not_found")
 
         const now = Date.now()
-        const updates: string[] = []
-        const vals: unknown[] = []
+        const { params: bp, bind } = makeBind(dialect)
+        const setClauses: string[] = []
 
-        if (body.title !== undefined) { updates.push("title = ?"); vals.push(body.title) }
-        if (body.description !== undefined) { updates.push("description = ?"); vals.push(body.description) }
-        if (body.due_date !== undefined) { updates.push("due_date = ?"); vals.push(body.due_date) }
-        if (body.estimate_points !== undefined) { updates.push("estimate_points = ?"); vals.push(body.estimate_points) }
-        if (body.labels !== undefined) { updates.push("labels = ?"); vals.push(JSON.stringify(body.labels)) }
-        if (body.assignee_id !== undefined) { updates.push("assignee_id = ?"); vals.push(body.assignee_id) }
+        if (body.title !== undefined) setClauses.push(`title = ${bind(body.title)}`)
+        if (body.description !== undefined) setClauses.push(`description = ${bind(body.description)}`)
+        if (body.due_date !== undefined) setClauses.push(`due_date = ${bind(body.due_date)}`)
+        if (body.estimate_points !== undefined) setClauses.push(`estimate_points = ${bind(body.estimate_points)}`)
+        if (body.labels !== undefined) setClauses.push(`labels = ${bind(JSON.stringify(body.labels))}`)
+        if (body.assignee_id !== undefined) setClauses.push(`assignee_id = ${bind(body.assignee_id)}`)
 
         // Handle status change with history
         if (body.status !== undefined) {
             const [newStatus] = await sql`SELECT * FROM tracker_statuses WHERE id = ${body.status} AND project_id = ${task.project_id}`
             if (!newStatus) { set.status = 422; return trackerError("validation_failed", "Some fields are invalid", { fields: { status: "not found" } }) }
             const [oldStatus] = await sql`SELECT * FROM tracker_statuses WHERE id = ${task.status_id}`
-            updates.push("status_id = ?"); vals.push(body.status)
+            setClauses.push(`status_id = ${bind(body.status)}`)
 
-            // Lifecycle timestamps
-            if (newStatus.category === "in_progress" && !task.started_at) { updates.push("started_at = ?"); vals.push(now) }
-            if ((newStatus.category === "done" || newStatus.category === "cancelled") && !task.completed_at) { updates.push("completed_at = ?"); vals.push(now) }
-            if (newStatus.category === "in_progress" && task.completed_at) { updates.push("completed_at = ?"); vals.push(null) }
+            if (newStatus.category === "in_progress" && !task.started_at) setClauses.push(`started_at = ${bind(now)}`)
+            if ((newStatus.category === "done" || newStatus.category === "cancelled") && !task.completed_at) setClauses.push(`completed_at = ${bind(now)}`)
+            if (newStatus.category === "in_progress" && task.completed_at) setClauses.push(`completed_at = ${bind(null)}`)
 
-            // Record history
+            const { params: hp, bind: hb } = makeBind(dialect)
             const histId = crypto.randomUUID()
-            await sql.unsafe(`INSERT INTO tracker_task_history (id, task_id, at, field, from_value, to_value, actor_id, created_at) VALUES (?, ?, ?, 'status', ?, ?, NULL, ?)`,
-                [histId, params.task_id, now, JSON.stringify({ id: task.status_id, name: oldStatus?.name, category: oldStatus?.category }),
-                 JSON.stringify({ id: newStatus.id, name: newStatus.name, category: newStatus.category }), now])
+            await sql.unsafe(
+                `INSERT INTO tracker_task_history (id, task_id, at, field, from_value, to_value, actor_id, created_at) VALUES (${hb(histId)}, ${hb(params.task_id)}, ${hb(now)}, 'status', ${hb(JSON.stringify({ id: task.status_id, name: oldStatus?.name, category: oldStatus?.category }))}, ${hb(JSON.stringify({ id: newStatus.id, name: newStatus.name, category: newStatus.category }))}, NULL, ${hb(now)})`,
+                hp,
+            )
         }
 
-        if (body.priority !== undefined) { updates.push("priority_id = ?"); vals.push(body.priority) }
+        if (body.priority !== undefined) setClauses.push(`priority_id = ${bind(body.priority)}`)
 
-        if (updates.length === 0) { return fetchTask(params.task_id) }
+        if (setClauses.length === 0) { return fetchTask(params.task_id) }
 
-        updates.push("updated_at = ?"); vals.push(now)
-        vals.push(params.task_id)
-        await sql.unsafe(`UPDATE tracker_tasks SET ${updates.join(", ")} WHERE id = ?`, vals)
+        setClauses.push(`updated_at = ${bind(now)}`)
+        const idP = bind(params.task_id)
+        await sql.unsafe(`UPDATE tracker_tasks SET ${setClauses.join(", ")} WHERE id = ${idP}`, bp)
 
         const updated = await fetchTask(params.task_id)
         const eventType = body.status !== undefined ? "task.status_changed" : "task.updated"
@@ -762,14 +767,16 @@ export const trackerRoutes = new Elysia({ prefix: "/api/v1" })
         const retryAfter = checkTrackerRateLimit(token.id)
         if (retryAfter) { set.status = 429; set.headers["Retry-After"] = String(retryAfter); return trackerError("rate_limited", "Too many requests") }
         requireScope(token, "webhooks:write")
-        const { sql } = storage()
+        const { sql, dialect } = storage()
         const limit = Math.min(Number(query.limit ?? 50), 100)
         const cursor = decodeCursor(query.cursor)
         const cursorU = cursor?.u ?? 0
         const cursorI = cursor?.i ?? ""
+        const { params: wp, bind: wb } = makeBind(dialect)
+        const c1 = wb(cursorU), c2 = wb(cursorU), c3 = wb(cursorI), lp = wb(limit + 1)
         const rows = await sql.unsafe(
-            `SELECT * FROM tracker_webhooks WHERE (created_at > ? OR (created_at = ? AND id > ?)) ORDER BY created_at ASC, id ASC LIMIT ?`,
-            [cursorU, cursorU, cursorI, limit + 1]
+            `SELECT * FROM tracker_webhooks WHERE (created_at > ${c1} OR (created_at = ${c2} AND id > ${c3})) ORDER BY created_at ASC, id ASC LIMIT ${lp}`,
+            wp,
         )
         const hasMore = rows.length > limit
         const data = rows.slice(0, limit).map((r: any) => ({
