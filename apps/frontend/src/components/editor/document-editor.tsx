@@ -4,9 +4,12 @@ import { cn } from "cn"
 import {
     ArrowDown,
     ArrowUp,
+    Download,
     GripVertical,
     Heading1,
     Heading2,
+    ImageIcon,
+    Paperclip,
     Plus,
     SquareCheck,
     Table2,
@@ -15,15 +18,18 @@ import {
     Type,
     type LucideProps,
 } from "lucide-react"
+import { filesApi, formatBytes, type StoredFile } from "@/api/files"
+import { UploadPageContext, useFileUpload } from "@/hooks/use-file-upload"
 import { DatabaseView } from "@/components/database/database-view"
 import { createDatabase, type DatabaseData } from "@/components/database/model"
-import { Checkbox, IconButton, MenuItem, MenuLabel, MenuSection, MenuSeparator, PageIcon, Popover } from "@/components/pereskia"
+import { Checkbox, IconButton, MenuItem, MenuLabel, MenuSection, MenuSeparator, PageIcon, Popover, Spinner } from "@/components/pereskia"
 import { pageTitle, useCreatePage, usePages } from "@/hooks/use-pages"
 import { useAppStore } from "@/stores/app-store"
 
-type BlockType = "paragraph" | "heading1" | "heading2" | "todo" | "database" | "databasePage"
+type BlockType = "paragraph" | "heading1" | "heading2" | "todo" | "database" | "databasePage" | "image" | "file"
 
-const isTextBlock = (block: Block) => block.type !== "database" && block.type !== "databasePage"
+const TEXT_TYPES: BlockType[] = ["paragraph", "heading1", "heading2", "todo"]
+const isTextBlock = (block: Pick<Block, "type">) => TEXT_TYPES.includes(block.type)
 
 export type Block = {
     id: string
@@ -32,6 +38,7 @@ export type Block = {
     checked?: boolean
     database?: DatabaseData
     pageId?: string
+    file?: StoredFile
 }
 
 type Command = {
@@ -60,6 +67,8 @@ const COMMANDS: Command[] = [
     { type: "heading1", label: "Heading 1", description: "Big section heading.", icon: Heading1 },
     { type: "heading2", label: "Heading 2", description: "Medium section heading.", icon: Heading2 },
     { type: "todo", label: "To-do list", description: "Track tasks with a to-do list.", icon: SquareCheck },
+    { type: "image", label: "Image", description: "Upload an image.", icon: ImageIcon },
+    { type: "file", label: "File", description: "Upload a document or any file.", icon: Paperclip },
     { type: "database", label: "Database - Inline", description: "Add a table inside this page.", icon: Table2 },
     { type: "databasePage", label: "Database - Full page", description: "Add a table on its own page.", icon: TableProperties },
 ]
@@ -272,6 +281,7 @@ export const DocumentEditor = forwardRef<{ focusFirst: () => void }, DocumentEdi
     const [activeId, setActiveId] = useState<string>(blocks[0].id)
     const [dragId, setDragId] = useState<string | null>(null)
     const [dragOverId, setDragOverId] = useState<string | null>(null)
+    const [autoPickId, setAutoPickId] = useState<string | null>(null)
 
     const pendingFocus = useRef<string | null>(null)
     const focusBlock = (id: string) => {
@@ -355,18 +365,21 @@ export const DocumentEditor = forwardRef<{ focusFirst: () => void }, DocumentEdi
     const handleTypeChange = (id: string, type: BlockType) => {
         const stripSlash = (content: string) => content.replace(/\/\S*$/, '').replace(/\/$/, '')
 
-        if (type === "database" || type === "databasePage") {
-            const extra: Partial<Block> = type === "database"
-                ? { database: createDatabase() }
-                : { pageId: createDatabasePageFor() }
+        if (!isTextBlock({ type })) {
+            const extra: Partial<Block> =
+                type === "database" ? { database: createDatabase() }
+                : type === "databasePage" ? { pageId: createDatabasePageFor() }
+                : {}
             const after: Block = { id: nanoid(), type: "paragraph", content: "" }
+            const source = blocks.find((b) => b.id === id)
+            const insertedId = source && stripSlash(source.content).trim() ? nanoid() : id
 
             setBlocks((prev) => {
                 const index = prev.findIndex(b => b.id === id)
                 const current = prev[index]
                 const remaining = stripSlash(current.content)
                 const dbBlock: Block = remaining.trim()
-                    ? { id: nanoid(), type, content: "", ...extra }
+                    ? { id: insertedId, type, content: "", ...extra }
                     : { ...current, type, content: "", ...extra }
                 const next = [...prev]
                 if (remaining.trim()) {
@@ -378,7 +391,8 @@ export const DocumentEditor = forwardRef<{ focusFirst: () => void }, DocumentEdi
                 return next
             })
             setActiveId(after.id)
-            focusBlock(after.id)
+            if (type === "image" || type === "file") setAutoPickId(insertedId)
+            else focusBlock(after.id)
             return
         }
 
@@ -427,6 +441,10 @@ export const DocumentEditor = forwardRef<{ focusFirst: () => void }, DocumentEdi
         setBlocks((prev) => prev.map((b) => b.id === id && b.database ? { ...b, database: fn(b.database) } : b))
     }
 
+    const handleFileChange = (id: string, file: StoredFile) => {
+        setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, file } : b)))
+    }
+
     const handleCheckboxChange = (id: string, checked: boolean) => {
         setBlocks((prev) => prev.map((b) => b.id === id ? { ...b, checked } : b))
         focusBlock(id)
@@ -469,6 +487,10 @@ export const DocumentEditor = forwardRef<{ focusFirst: () => void }, DocumentEdi
                     {!isTextBlock(block) ? (
                         <NonTextBlock
                             block={block}
+                            pageId={pageId}
+                            autoPick={autoPickId === block.id}
+                            onAutoPicked={() => setAutoPickId(null)}
+                            onFileChange={(file) => handleFileChange(block.id, file)}
                             onDatabaseChange={(fn) => handleDatabaseChange(block.id, fn)}
                             onInsert={(position) => insertParagraph(block.id, position)}
                             onDelete={() => deleteBlock(block.id)}
@@ -499,12 +521,20 @@ export const DocumentEditor = forwardRef<{ focusFirst: () => void }, DocumentEdi
 
 function NonTextBlock({
     block,
+    pageId,
+    autoPick,
+    onAutoPicked,
+    onFileChange,
     onDatabaseChange,
     onInsert,
     onDelete,
     onTurnIntoPage,
 }: {
     block: Block
+    pageId: string
+    autoPick: boolean
+    onAutoPicked: () => void
+    onFileChange: (file: StoredFile) => void
     onDatabaseChange: (fn: (data: DatabaseData) => DatabaseData) => void
     onInsert: (position: "above" | "below") => void
     onDelete: () => void
@@ -546,6 +576,21 @@ function NonTextBlock({
                             }}
                         />
                     </MenuSection>
+                    {block.file && (
+                        <>
+                            <MenuSeparator />
+                            <MenuSection>
+                                <MenuItem
+                                    icon={<Download className="size-4" strokeWidth={1.75} />}
+                                    label="Download"
+                                    onClick={() => {
+                                        setMenuOpen(false)
+                                        window.location.assign(filesApi.url(block.file!, true))
+                                    }}
+                                />
+                            </MenuSection>
+                        </>
+                    )}
                     {onTurnIntoPage && (
                         <>
                             <MenuSeparator />
@@ -576,8 +621,22 @@ function NonTextBlock({
                 </Popover>
             </div>
 
-            {block.type === "database" && block.database && <DatabaseView data={block.database} onChange={onDatabaseChange} />}
+            {block.type === "database" && block.database && (
+                <UploadPageContext.Provider value={pageId}>
+                    <DatabaseView data={block.database} onChange={onDatabaseChange} />
+                </UploadPageContext.Provider>
+            )}
             {block.type === "databasePage" && block.pageId && <DatabasePageLink pageId={block.pageId} />}
+            {(block.type === "image" || block.type === "file") && (
+                <FileBlock
+                    kind={block.type}
+                    file={block.file}
+                    pageId={pageId}
+                    autoPick={autoPick}
+                    onAutoPicked={onAutoPicked}
+                    onChange={onFileChange}
+                />
+            )}
         </div>
     )
 }
@@ -598,5 +657,120 @@ function DatabasePageLink({ pageId }: { pageId: string }) {
             </span>
             <span className="truncate border-b border-(--pk-text-tertiary)/40 text-base leading-tight font-medium">{pageTitle(page)}</span>
         </button>
+    )
+}
+
+function FileBlock({
+    kind,
+    file,
+    pageId,
+    autoPick,
+    onAutoPicked,
+    onChange,
+}: {
+    kind: "image" | "file"
+    file?: StoredFile
+    pageId: string
+    autoPick: boolean
+    onAutoPicked: () => void
+    onChange: (file: StoredFile) => void
+}) {
+    const inputRef = useRef<HTMLInputElement>(null)
+    const { upload: uploadFile, progress, uploading, error } = useFileUpload(pageId, (f) =>
+        kind === "image" && !f.type.startsWith("image/") ? "That isn't an image." : null,
+    )
+    const [dragging, setDragging] = useState(false)
+    const didAutoPick = useRef(false)
+
+    useEffect(() => {
+        if (!autoPick || didAutoPick.current) return
+        didAutoPick.current = true
+        inputRef.current?.click()
+        onAutoPicked()
+    }, [autoPick, onAutoPicked])
+
+    const upload = async (picked: File | undefined) => {
+        if (!picked) return
+        const stored = await uploadFile(picked)
+        if (stored) onChange(stored)
+    }
+
+    const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+        if (!e.dataTransfer.files.length) return
+        e.preventDefault()
+        e.stopPropagation()
+        setDragging(false)
+        upload(e.dataTransfer.files[0])
+    }
+
+    const input = (
+        <input
+            ref={inputRef}
+            type="file"
+            hidden
+            accept={kind === "image" ? "image/*" : undefined}
+            onChange={(e) => {
+                upload(e.target.files?.[0])
+                e.target.value = ""
+            }}
+        />
+    )
+
+    if (file && kind === "image") {
+        return (
+            <div className="my-1">
+                <a href={filesApi.url(file)} target="_blank" rel="noreferrer">
+                    <img src={filesApi.url(file)} alt={file.name} className="max-h-[600px] max-w-full rounded-sm" draggable={false} />
+                </a>
+            </div>
+        )
+    }
+
+    if (file) {
+        return (
+            <a
+                href={filesApi.url(file)}
+                target="_blank"
+                rel="noreferrer"
+                className="pk-root my-0.5 flex h-8 w-full items-center gap-2 rounded-sm px-1 hover:bg-(--pk-hover)"
+            >
+                <Paperclip className="size-4 shrink-0 text-(--pk-text-secondary)" />
+                <span className="truncate text-base">{file.name}</span>
+                <span className="shrink-0 text-xs text-(--pk-text-tertiary)">{formatBytes(file.size)}</span>
+            </a>
+        )
+    }
+
+    const Icon = kind === "image" ? ImageIcon : Paperclip
+    return (
+        <div
+            onDragOver={(e) => {
+                if (!e.dataTransfer.types.includes("Files")) return
+                e.preventDefault()
+                e.stopPropagation()
+                setDragging(true)
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+        >
+            {input}
+            <button
+                type="button"
+                disabled={uploading}
+                onClick={() => inputRef.current?.click()}
+                className={cn(
+                    "pk-root my-1 flex w-full cursor-pointer items-center gap-2.5 rounded-sm bg-(--pk-hover) px-3 py-3 text-left text-sm text-(--pk-text-secondary) hover:bg-(--pk-hover)/80",
+                    dragging && "ring-2 ring-blue-400",
+                )}
+            >
+                {uploading ? <Spinner /> : <Icon className="size-5" strokeWidth={1.5} />}
+                <span>
+                    {uploading
+                        ? `Uploading… ${Math.round(progress! * 100)}%`
+                        : kind === "image" ? "Add an image" : "Upload a file"}
+                </span>
+            </button>
+            {error && <p className="px-1 text-xs text-red-500">{error}</p>}
+        </div>
     )
 }

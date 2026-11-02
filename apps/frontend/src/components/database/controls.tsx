@@ -300,7 +300,7 @@ function InlineFilterValue({
     if (Array.isArray(filter.value) && filter.value.length) {
         summary = (
             <span className="flex min-w-0 gap-1 overflow-hidden">
-                {filter.value.map((id) => {
+                {(filter.value as string[]).map((id) => {
                     const option = property.options?.find((o) => o.id === id)
                     return option ? <OptionChip key={id} option={option} isStatus={property.type === "status"} /> : null
                 })}

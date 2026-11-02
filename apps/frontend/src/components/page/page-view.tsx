@@ -13,6 +13,7 @@ import { schemaChanged, useRowSync } from "@/hooks/use-database"
 import { useAutosave, useCreatePage, usePage } from "@/hooks/use-pages"
 import { useCurrentWorkspace } from "@/hooks/use-workspaces"
 import { queryKeys } from "@/lib/query-client"
+import { UploadPageContext } from "@/hooks/use-file-upload"
 
 export function PageView({ pageId }: { pageId: string }) {
     const { data: page, error } = usePage(pageId)
@@ -68,7 +69,7 @@ function DatabasePage({ page, save }: { page: Page; save: (patch: PagePatch) => 
     }
 
     return (
-        <>
+        <UploadPageContext.Provider value={page.id}>
             <div className="px-[max(24px,min(96px,8vw))] pt-20 pb-32">
                 <TrackerConnection pageId={page.id} />
                 <DatabaseView variant="page" data={data} onChange={onChange} onOpenRow={openRow} />
@@ -76,7 +77,7 @@ function DatabasePage({ page, save }: { page: Page; save: (patch: PagePatch) => 
             {openRowId && (
                 <RowPanel key={openRowId} pageId={page.id} rowId={openRowId} data={data} onChange={onChange} onClose={() => openRow(null)} />
             )}
-        </>
+        </UploadPageContext.Provider>
     )
 }
 

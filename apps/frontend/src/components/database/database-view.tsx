@@ -27,6 +27,7 @@ import {
     personIds,
     searchRows,
     type CellValue,
+    cellFiles,
     type DatabaseData,
     type Property,
     type PropertyType,
@@ -35,6 +36,7 @@ import {
 } from "./model"
 import { DatePicker, OptionPicker, PersonName } from "./editors"
 import { DatabaseToolbar, FilterSortBar, type ControlsState } from "./controls"
+import { FilesDisplay, FilesEditor } from "./files-cell"
 import {
     MenuItem,
     MenuSection,
@@ -60,7 +62,7 @@ const INLINE_BREAKOUT: React.CSSProperties = {
 
 const ADD_COLUMN_WIDTH = 36
 const MIN_COLUMN_WIDTH = 60
-const PROPERTY_TYPES: PropertyType[] = ["text", "number", "select", "multiSelect", "status", "date", "checkbox", "person"]
+const PROPERTY_TYPES: PropertyType[] = ["text", "number", "select", "multiSelect", "status", "date", "checkbox", "person", "files"]
 
 export function DatabaseView({
     data: raw,
@@ -99,7 +101,7 @@ export function DatabaseView({
         for (const f of rules) {
             const p = data.properties.find((x) => x.id === f.propertyId)
             if (!p || f.value === null || p.id in cells) continue
-            const values = Array.isArray(f.value) ? f.value : []
+            const values = Array.isArray(f.value) ? (f.value as string[]) : []
             if ((p.type === "select" || p.type === "status") && f.operator === "is" && values.length) {
                 cells[p.id] = values[0]
             } else if ((p.type === "multiSelect" || p.type === "person") && f.operator === "contains" && values.length) {
@@ -673,7 +675,7 @@ export function Cell({
     className?: string
 }) {
     const tdRef = useRef<HTMLElement>(null)
-    const isPopoverType = ["select", "multiSelect", "status", "date", "person"].includes(property.type)
+    const isPopoverType = ["select", "multiSelect", "status", "date", "person", "files"].includes(property.type)
     const isText = property.type === "title" || property.type === "text" || property.type === "number"
     const Tag = as as "td"
 
@@ -712,12 +714,14 @@ export function Cell({
                     sideOffset={({ anchor }) => -anchor.height}
                     className={property.type === "date" ? "" : "w-[max(300px,var(--anchor-width))]"}
                 >
-                    {property.type === "date" ? (
+                    {property.type === "files" ? (
+                        <FilesEditor files={cellFiles(value)} onChange={onChange} />
+                    ) : property.type === "date" ? (
                         <DatePicker value={(value as string) ?? null} onChange={onChange} />
                     ) : (
                         <OptionPicker
                             property={property}
-                            selected={Array.isArray(value) ? value : value ? [value as string] : []}
+                            selected={Array.isArray(value) ? (value as string[]) : value ? [value as string] : []}
                             multi={property.type === "multiSelect" || property.type === "person"}
                             onChange={(ids) => onChange(property.type === "multiSelect" || property.type === "person" ? ids : (ids[0] ?? null))}
                             onDone={() => onEdit(false)}
@@ -769,6 +773,8 @@ function CellDisplay({
             return value ? <span className="truncate whitespace-nowrap">{formatDate(value as string)}</span> : null
         case "checkbox":
             return <Checkbox checked={value === true} onChange={onChange} />
+        case "files":
+            return <FilesDisplay files={cellFiles(value)} />
         case "person":
             return (
                 <span className="flex min-w-0 flex-wrap gap-x-2.5 gap-y-1">

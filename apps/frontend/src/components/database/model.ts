@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid"
 import type { PropertyKind, TagColor } from "@/components/pereskia"
+import type { StoredFile } from "@/api/files"
 
 export type PropertyType = PropertyKind
 export type { TagColor }
@@ -21,7 +22,10 @@ export type Property = {
     options?: SelectOption[]
 }
 
-export type CellValue = string | number | boolean | string[] | null
+export type CellValue = string | number | boolean | string[] | StoredFile[] | null
+
+export const cellFiles = (value: CellValue): StoredFile[] =>
+    Array.isArray(value) ? value.filter((f): f is StoredFile => typeof f === "object" && f !== null && "key" in f) : []
 
 export type Row = {
     id: string
@@ -83,7 +87,7 @@ const people = new Map<string, string>()
 
 // Person cells hold a list of user ids; older single-person cells hold one id.
 export const personIds = (value: CellValue): string[] =>
-    Array.isArray(value) ? value : typeof value === "string" && value ? [value] : []
+    Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : typeof value === "string" && value ? [value] : []
 
 export function setPeople(members: { id: string; name: string }[]) {
     people.clear()
@@ -126,6 +130,7 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
     date: "Date",
     checkbox: "Checkbox",
     person: "Person",
+    files: "Files & media",
 }
 
 export const STATUS_GROUP_LABELS: Record<StatusGroup, string> = {
@@ -165,6 +170,7 @@ export const OPERATORS_BY_TYPE: Record<PropertyType, FilterOperator[]> = {
     date: ["is", "isBefore", "isAfter", "isOnOrBefore", "isOnOrAfter", "isEmpty", "isNotEmpty"],
     checkbox: ["is", "isNot"],
     person: ["contains", "doesNotContain", "isEmpty", "isNotEmpty"],
+    files: ["isEmpty", "isNotEmpty"],
 }
 
 export const DEFAULT_OPERATOR: Record<Property["type"], FilterOperator> = {
@@ -177,6 +183,7 @@ export const DEFAULT_OPERATOR: Record<Property["type"], FilterOperator> = {
     date: "is",
     checkbox: "is",
     person: "contains",
+    files: "isNotEmpty",
 }
 
 export function newFilter(property: Property): Filter {
@@ -215,6 +222,7 @@ export function emptyValue(type: PropertyType): CellValue {
     switch (type) {
         case "multiSelect":
         case "person":
+        case "files":
             return []
         case "checkbox":
             return false
@@ -266,6 +274,8 @@ export function convertValue(value: CellValue, from: Property, to: Property): Ce
             const names = text.split(",").map((s) => s.trim())
             return [...people].filter(([, name]) => names.includes(name)).map(([id]) => id)
         }
+        case "files":
+            return from.type === "files" ? value : []
     }
 }
 
@@ -287,6 +297,7 @@ export function optionsFromValues(rows: Row[], from: Property, to: PropertyType)
 export function valueToText(value: CellValue, property: Property): string {
     if (value === null || value === undefined) return ""
     if (property.type === "checkbox") return value ? "true" : ""
+    if (property.type === "files") return cellFiles(value).map((f) => f.name).join(", ")
     if (property.type === "person") return personIds(value).map((id) => people.get(id)).filter(Boolean).join(", ")
     if (property.type === "select" || property.type === "status") {
         return property.options?.find((o) => o.id === value)?.name ?? ""
@@ -377,6 +388,8 @@ export function matchesFilter(row: Row, filter: Filter, property: Property | und
             const checked = cell === true
             return operator === "isNot" ? checked !== value : checked === value
         }
+        case "files":
+            return true
     }
 }
 
@@ -398,6 +411,8 @@ function compareCells(a: CellValue, b: CellValue, property: Property): number {
             return (a as number) - (b as number)
         case "checkbox":
             return Number(a === true) - Number(b === true)
+        case "files":
+            return cellFiles(a).length - cellFiles(b).length
         case "person":
             return (people.get(personIds(a)[0]) ?? "").localeCompare(people.get(personIds(b)[0]) ?? "")
         case "select":

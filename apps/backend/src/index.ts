@@ -17,6 +17,7 @@ import { trackerErrorResponse, trackerRoutes } from './routes/tracker'
 import { databaseRoutes } from './routes/databases'
 import { backfillStartedAt } from './rows'
 import { trackerAdminRoutes } from './routes/trackerAdmin'
+import { fileRoutes } from './routes/files'
 
 const config = await loadConfig()
 loadEmailConfig(config)
@@ -71,6 +72,7 @@ app
   .use(workspaceRoutes)
   .use(memberRoutes)
   .use(pageRoutes)
+  .use(fileRoutes)
   .use(importRoutes)
   .use(notionImportRoutes)
   .use(instanceRoutes)

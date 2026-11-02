@@ -1,3 +1,4 @@
+import type { StoredFile } from "./files"
 import type { PropertyKind } from "@/components/pereskia"
 
 export type Provider = "sqlite" | "postgres" | "mysql" | "supabase"
@@ -98,7 +99,7 @@ export type Page = PageMeta & { cover: string | null; content: unknown; createdA
 
 export type PagePatch = { title?: string; icon?: string | null; cover?: string | null; content?: unknown; parentId?: string | null }
 
-export type CellValue = string | number | boolean | string[] | null
+export type CellValue = string | number | boolean | string[] | StoredFile[] | null
 
 export type RowOps = {
     upserts?: { id: string; cells?: Record<string, CellValue>; position?: number }[]

@@ -8,6 +8,7 @@ import {
     Hash,
     List,
     Loader,
+    Paperclip,
     SquareCheck,
     Table2,
     TextAlignStart,
@@ -15,7 +16,7 @@ import {
     type LucideProps,
 } from "lucide-react"
 
-export type PropertyKind = "title" | "text" | "number" | "select" | "multiSelect" | "status" | "date" | "checkbox" | "person"
+export type PropertyKind = "title" | "text" | "number" | "select" | "multiSelect" | "status" | "date" | "checkbox" | "person" | "files"
 
 const PROPERTY_ICONS: Record<PropertyKind, ComponentType<LucideProps>> = {
     title: CaseSensitive,
@@ -27,6 +28,7 @@ const PROPERTY_ICONS: Record<PropertyKind, ComponentType<LucideProps>> = {
     date: Calendar,
     checkbox: SquareCheck,
     person: UserRound,
+    files: Paperclip,
 }
 
 export function PropertyIcon({ type, className }: { type: PropertyKind; className?: string }) {
