@@ -23,6 +23,11 @@ services:
       # RESEND_API_KEY: re_...
       # SMTP_URL: smtps://user:pass@smtp.example.com:465
       # MAIL_FROM: Pereskia <invites@example.com>
+      # File uploads (any S3-compatible store, e.g. MinIO):
+      # OBJECT_STORE_URL: https://minio.example.com
+      # OBJECT_STORE_ACCESS_KEY: ...
+      # OBJECT_STORE_SECRET_KEY: ...
+      # OBJECT_STORE_BUCKET: pereskia
     restart: unless-stopped
 
   # postgres:
