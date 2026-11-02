@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { cn } from "cn"
-import { ExternalLink, X } from "lucide-react"
+import { ExternalLink, Paperclip, X } from "lucide-react"
 import { databasesApi } from "@/api/databases"
 import type { RowDetail, TaskComment, TaskHistoryEntry } from "@/api/types"
 import { queryKeys } from "@/lib/query-client"
-import { Avatar, Button, PropertyIcon } from "@/components/pereskia"
+import { Avatar, Button, PropertyIcon, Spinner } from "@/components/pereskia"
+import type { StoredFile } from "@/api/files"
+import { useFileUpload } from "@/hooks/use-file-upload"
 import { Cell } from "./database-view"
 import { usePeopleView } from "./use-people-view"
-import { emptyValue, type CellValue, type DatabaseData, type SelectOption } from "./model"
+import { cellFiles, createProperty, emptyValue, type CellValue, type DatabaseData, type SelectOption } from "./model"
 
 type Update = (fn: (data: DatabaseData) => DatabaseData) => void
 
@@ -65,6 +67,19 @@ export function RowPanel({
 
     const setOptions = (propertyId: string, options: SelectOption[]) =>
         update((d) => ({ ...d, properties: d.properties.map((p) => (p.id === propertyId ? { ...p, options } : p)) }))
+
+    const attach = (files: StoredFile[]) =>
+        update((d) => {
+            const existing = d.properties.find((p) => p.type === "files")
+            const property = existing ?? createProperty("files", "Attachments")
+            return {
+                ...d,
+                properties: existing ? d.properties : [...d.properties, property],
+                rows: d.rows.map((r) =>
+                    r.id === rowId ? { ...r, cells: { ...r.cells, [property.id]: [...cellFiles(r.cells[property.id] ?? null), ...files] } } : r,
+                ),
+            }
+        })
 
     // Status and other edits change the task's history; refresh the activity once they've been saved.
     useEffect(() => {
@@ -141,6 +156,7 @@ export function RowPanel({
                         {detail?.startedAt && <ReadOnlyProperty label="Started" value={when(detail.startedAt)} />}
                         {detail?.completedAt && <ReadOnlyProperty label="Completed" value={when(detail.completedAt)} />}
                     </div>
+                    {!view.properties.some((p) => p.type === "files") && <AttachButton pageId={pageId} onUploaded={attach} />}
 
                     <div className="my-6 h-px bg-(--pk-divider)" />
                     {error ? (
@@ -154,6 +170,46 @@ export function RowPanel({
                 </div>
             )}
         </aside>
+    )
+}
+
+function AttachButton({ pageId, onUploaded }: { pageId: string; onUploaded: (files: StoredFile[]) => void }) {
+    const inputRef = useRef<HTMLInputElement>(null)
+    const { upload, progress, uploading, error } = useFileUpload(pageId)
+
+    const handlePicked = async (picked: FileList | null) => {
+        const stored: StoredFile[] = []
+        for (const file of Array.from(picked ?? [])) {
+            const result = await upload(file)
+            if (!result) break
+            stored.push(result)
+        }
+        if (stored.length) onUploaded(stored)
+    }
+
+    return (
+        <div className="mt-1">
+            <input
+                ref={inputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => {
+                    handlePicked(e.target.files)
+                    e.target.value = ""
+                }}
+            />
+            <button
+                type="button"
+                disabled={uploading}
+                onClick={() => inputRef.current?.click()}
+                className="flex h-[34px] cursor-pointer items-center gap-1.5 rounded-sm px-1 text-sm text-(--pk-text-secondary) hover:bg-(--pk-hover)"
+            >
+                {uploading ? <Spinner /> : <Paperclip className="size-4 text-(--pk-text-tertiary)" />}
+                {uploading ? `Uploading… ${Math.round(progress! * 100)}%` : "Attach file"}
+            </button>
+            {error && <p className="px-1 text-xs text-red-500">{error}</p>}
+        </div>
     )
 }
 
